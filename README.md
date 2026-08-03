@@ -125,7 +125,7 @@ Everything runs locally. No data leaves your machine, there is no telemetry, and
 
 ## 📄 License
 
-[MIT](LICENSE) © Roy ([@elm1nst3r](https://github.com/elm1nst3r))
+[MIT](LICENSE) © [@elm1nst3r](https://github.com/elm1nst3r)
 
 ---
 
