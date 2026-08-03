@@ -2,7 +2,7 @@
 name = "agent-ledger"
 version = "0.8.0"
 description = "IO Inventory — developer & AI environment inventory"
-authors = ["Roy"]
+authors = ["elm1nst3r"]
 edition = "2021"
 
 [lib]
