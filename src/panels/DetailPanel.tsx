@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { revealItemInDir, openUrl, openPath } from "@tauri-apps/plugin-opener";
-import { ExternalLink, FolderOpen, FileText } from "lucide-react";
+import { ExternalLink, FolderOpen, FileText, ArrowUpCircle, Trash2, AlertTriangle, X } from "lucide-react";
 import { useStore } from "../store";
-import { formatBytes } from "../lib/api";
-import type { Item } from "../lib/types";
+import { api, formatBytes } from "../lib/api";
+import type { ActionInfo, ActionResult, Item } from "../lib/types";
 
 export default function DetailPanel() {
   const selectedKey = useStore((s) => s.selectedKey);
@@ -73,14 +73,65 @@ function ItemDetail({
   const [why, setWhy] = useState(item.why ?? "");
   const [saved, setSaved] = useState(false);
   const enrich = useStore((s) => s.enrich);
+  const scan = useStore((s) => s.scan);
   const info = useStore((s) => s.enrichCache[item.item_key]);
   const enriching = useStore((s) => s.enriching === item.item_key);
+
+  const [actions, setActions] = useState<ActionInfo | null>(null);
+  const [confirm, setConfirm] = useState<"update" | "delete" | null>(null);
+  const [running, setRunning] = useState<"update" | "delete" | null>(null);
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null);
+
+  const setItemTags = useStore((s) => s.setItemTags);
+  const setView = useStore((s) => s.setView);
+  // NOTE: derive with useMemo — a selector that returns a fresh array each call
+  // sends useSyncExternalStore into an infinite render loop.
+  const inventoryItems = useStore((s) => s.inventory?.items);
+  const allTagSuggestions = useMemo(
+    () => [...new Set((inventoryItems ?? []).flatMap((i) => i.tags ?? []))].sort(),
+    [inventoryItems],
+  );
+  const [tagInput, setTagInput] = useState("");
+  const tags = item.tags ?? [];
+
+  function addTag(raw: string) {
+    const t = raw.trim().replace(/^#/, "");
+    if (!t || tags.includes(t)) {
+      setTagInput("");
+      return;
+    }
+    setItemTags(item.item_key, [...tags, t]);
+    setTagInput("");
+  }
+  function removeTag(t: string) {
+    setItemTags(
+      item.item_key,
+      tags.filter((x) => x !== t),
+    );
+  }
 
   useEffect(() => {
     setWhy(item.why ?? "");
     setSaved(false);
     enrich(item);
+    setActions(null);
+    setConfirm(null);
+    setActionResult(null);
+    api.itemActions(item.collector, item.name).then(setActions).catch(() => setActions(null));
   }, [item.item_key]);
+
+  async function doAction(action: "update" | "delete") {
+    setRunning(action);
+    try {
+      const r = await api.runItemAction(item.collector, item.name, action);
+      setActionResult(r);
+      setConfirm(null);
+      // Re-scan so lists/graph reflect the change; give a beat to read the result.
+      if (r.success) setTimeout(() => scan(), 1400);
+    } finally {
+      setRunning(null);
+    }
+  }
 
   const stacks: string[] = item.metadata?.stacks ?? [];
   const launch: string | undefined = item.metadata?.launch_cmd;
@@ -156,6 +207,79 @@ function ItemDetail({
         </div>
       )}
 
+      {actions && (actions.update || actions.delete) && (
+        <div className="manage">
+          <div className="manage-btns">
+            {actions.update && (
+              <button
+                className="btn qa-btn"
+                disabled={!actions.available || running !== null}
+                onClick={() => {
+                  setConfirm("update");
+                  setActionResult(null);
+                }}
+              >
+                <ArrowUpCircle size={14} /> Update
+              </button>
+            )}
+            {actions.delete && (
+              <button
+                className="btn qa-btn manage-del"
+                disabled={!actions.available || running !== null}
+                onClick={() => {
+                  setConfirm("delete");
+                  setActionResult(null);
+                }}
+              >
+                <Trash2 size={14} /> Uninstall
+              </button>
+            )}
+          </div>
+          {!actions.available && (
+            <div className="manage-note">Its package manager isn’t on your PATH.</div>
+          )}
+
+          {confirm && (
+            <div className={`manage-confirm ${confirm === "delete" ? "danger" : ""}`}>
+              {confirm === "delete" && <AlertTriangle size={15} className="mc-warn" />}
+              <div className="mc-body">
+                <div className="mc-q">
+                  {confirm === "delete" ? "Uninstall this item?" : "Update this item?"}
+                </div>
+                <code className="mc-cmd">
+                  {confirm === "update" ? actions.update : actions.delete}
+                </code>
+                <div className="mc-actions">
+                  <button
+                    className={`btn ${confirm === "delete" ? "btn-danger" : "btn-primary"}`}
+                    disabled={running !== null}
+                    onClick={() => doAction(confirm)}
+                  >
+                    {running
+                      ? "Running…"
+                      : confirm === "delete"
+                        ? "Confirm uninstall"
+                        : "Confirm update"}
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => setConfirm(null)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {actionResult && (
+            <div className={`manage-result ${actionResult.success ? "ok" : "fail"}`}>
+              <div className="cc-preview-head">
+                {actionResult.success ? "Done ✓ — refreshing…" : "Failed"}
+              </div>
+              <pre>{actionResult.output}</pre>
+            </div>
+          )}
+        </div>
+      )}
+
       <dl className="detail-fields">
         {info?.installed_at && <Field label="Installed / updated" value={info.installed_at} />}
         {item.size_bytes != null && (
@@ -179,6 +303,45 @@ function ItemDetail({
           </div>
         )}
       </dl>
+
+      <div className="tags-editor">
+        <label>Tags · views</label>
+        <div className="tag-chips">
+          {tags.map((t) => (
+            <span key={t} className="tag-chip">
+              <button
+                className="tag-view"
+                title={`Show the #${t} view`}
+                onClick={() => setView(t)}
+              >
+                #{t}
+              </button>
+              <button className="tag-x" title="Remove tag" onClick={() => removeTag(t)}>
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+          {tags.length === 0 && <span className="tag-empty">No tags yet</span>}
+        </div>
+        <input
+          className="tag-input"
+          list="tag-suggestions"
+          value={tagInput}
+          placeholder="Add a tag (e.g. favorite) and press Enter"
+          onChange={(e) => setTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              addTag(tagInput);
+            }
+          }}
+        />
+        <datalist id="tag-suggestions">
+          {allTagSuggestions.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+      </div>
 
       <div className="note-editor">
         <label>Why is this here? (note)</label>

@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ActionInfo,
+  ActionResult,
   CleanupAction,
   CleanupPreview,
   CleanupResult,
@@ -15,12 +17,18 @@ export const api = {
   getGraph: () => invoke<Graph | null>("get_graph"),
   setNote: (item_key: string, note: string, why: string) =>
     invoke<void>("set_note", { itemKey: item_key, note, why }),
+  setItemTags: (item_key: string, tags: string[]) =>
+    invoke<void>("set_item_tags", { itemKey: item_key, tags }),
   enrichItem: (item: Item) =>
     invoke<Enrichment>("enrich_item", {
       collector: item.collector,
       name: item.name,
       sourcePath: item.source_path ?? null,
     }),
+  itemActions: (collector: string, name: string) =>
+    invoke<ActionInfo>("item_actions", { collector, name }),
+  runItemAction: (collector: string, name: string, action: "update" | "delete") =>
+    invoke<ActionResult>("run_item_action", { collector, name, action }),
   listCleanups: () => invoke<CleanupAction[]>("list_cleanups"),
   previewCleanup: (id: string) => invoke<CleanupPreview>("preview_cleanup", { id }),
   runCleanup: (id: string) => invoke<CleanupResult>("run_cleanup", { id }),

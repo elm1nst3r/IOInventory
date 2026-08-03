@@ -16,6 +16,7 @@ export interface Item {
   metadata: any;
   note?: string | null;
   why?: string | null;
+  tags?: string[];
 }
 
 export interface ScanInfo {
@@ -71,6 +72,18 @@ export interface CleanupPreview {
 
 export interface CleanupResult {
   id: string;
+  command: string;
+  output: string;
+  success: boolean;
+}
+
+export interface ActionInfo {
+  update?: string | null;
+  delete?: string | null;
+  available: boolean;
+}
+
+export interface ActionResult {
   command: string;
   output: string;
   success: boolean;

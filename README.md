@@ -51,13 +51,20 @@ installed, why it's there, whether it's up to date, and what's safe to clean up.
 - 🤖 **AI-agent aware** — inventories Claude Code (skills, plugins, commands, MCP servers),
   plus Cursor, Windsurf, OpenAI Codex, Gemini CLI, Antigravity, Continue, Copilot, aider,
   and more — with cross-agent MCP servers from Claude, Codex, and Gemini.
-- 🔎 **Rich per-item context** — description, homepage, install date, and an **"up to date /
-  update available"** check, fetched on demand so scans stay fast.
-- 📝 **Notes** — jot *why* something is installed; notes persist across re-scans.
+- 🔎 **Rich per-item context** — description, homepage, install date, on-disk size (incl.
+  per-formula Homebrew sizes), and an **"up to date / update available"** check, fetched on demand.
+- 🔧 **Manage in place** — per-item **Update** and **Uninstall** buttons for Homebrew, npm, pip,
+  pipx, gem, cargo, Ollama, and Docker — each with an explicit confirm.
+- 🏷️ **Tags & saved views** — tag your favorite tools/skills, then flip a **view** to see only
+  those items in both the graph and the list.
+- 🔬 **Filter & sort** — quick filters (**update available / deprecated / noted**), a category
+  multi-select, and sort by name or size — all composable with search.
+- 📝 **Notes** — jot *why* something is installed; notes and tags persist across re-scans.
 - 🧰 **Utilities** — one-click, allowlisted **updates** (`brew`, `npm`, `rustup`, `pipx`,
   `cargo`, `gh`, or "update everything") and **cleanups** (brew/docker/cache), each with a
   **dry-run preview and confirm** — nothing destructive runs blind.
-- 📄 **Export `AGENT_MAP.md`** — a human-readable ledger of your whole environment.
+- 📄 **Export `AGENT_MAP.md`** — a human-readable ledger of your whole environment, including a
+  **Tagged Views** section.
 - 🌗 **Light & dark** blueprint-blue theme.
 - 🔒 **100% local** — no network calls, no telemetry. Config scans detect the *presence* of API
   keys, never their values.
@@ -113,7 +120,10 @@ cd src-tauri && cargo test scan_smoke -- --nocapture
 
 ## 🗺️ Roadmap
 
-- [ ] Full management: install / uninstall / per-package cleanup from the app
+- [ ] **Import** — load a previously exported inventory/ledger, and save/restore **static views**
+      (named, frozen versions of the lists) so you can snapshot and diff your environment over time
+- [ ] **Fix the logo & app icon** — polish the blueprint icon and its packaging across sizes/platforms
+- [ ] Install new packages (not just update/uninstall) from the app
 - [ ] Agent-driven self-updates — a CLI + Claude Code hook that appends to the ledger automatically
 - [ ] Background / scheduled scans
 - [ ] Windows package managers (winget / scoop / choco) + code signing

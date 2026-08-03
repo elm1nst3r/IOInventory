@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod export;
 mod graph;
+mod manage;
 mod model;
 mod scan;
 
@@ -35,7 +36,10 @@ pub fn run() {
             commands::get_inventory,
             commands::get_graph,
             commands::set_note,
+            commands::set_item_tags,
             commands::enrich_item,
+            commands::item_actions,
+            commands::run_item_action,
             commands::list_cleanups,
             commands::preview_cleanup,
             commands::run_cleanup,

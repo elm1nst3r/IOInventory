@@ -6,6 +6,7 @@ import GraphView from "./graph/GraphView";
 import ListView from "./views/ListView";
 import DetailPanel from "./panels/DetailPanel";
 import CleanupPanel from "./panels/CleanupPanel";
+import FilterBar from "./panels/FilterBar";
 import "./App.css";
 
 export default function App() {
@@ -109,11 +110,14 @@ export default function App() {
         ) : tab === "cleanup" ? (
           <CleanupPanel />
         ) : (
-          <div className="split">
-            <div className="split-main">
-              {tab === "graph" ? <GraphView /> : <ListView />}
+          <div className="workspace">
+            <FilterBar />
+            <div className="split">
+              <div className="split-main">
+                {tab === "graph" ? <GraphView /> : <ListView />}
+              </div>
+              <DetailPanel />
             </div>
-            <DetailPanel />
           </div>
         )}
       </main>

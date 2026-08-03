@@ -57,6 +57,9 @@ pub struct Item {
     pub note: Option<String>,
     #[serde(default)]
     pub why: Option<String>,
+    /// User-assigned tags, merged in from the tags table on read.
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 impl Item {
@@ -74,6 +77,7 @@ impl Item {
             metadata: serde_json::json!({}),
             note: None,
             why: None,
+            tags: Vec::new(),
         }
     }
 

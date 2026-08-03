@@ -15,6 +15,8 @@ pub fn to_agent_map(inv: &Inventory) -> String {
     let _ = writeln!(out, "> {} items across the environment.", inv.scan.item_count);
     let _ = writeln!(out);
 
+    write_tagged_views(&mut out, inv);
+
     let order = [
         Domain::Project,
         Domain::PackageManager,
@@ -56,12 +58,48 @@ pub fn to_agent_map(inv: &Inventory) -> String {
                     .filter(|s| !s.is_empty())
                     .map(|w| format!(" — {w}"))
                     .unwrap_or_default();
-                let _ = writeln!(out, "- **{}**{}{}", it.name, ver, note);
+                let _ = writeln!(out, "- **{}**{}{}{}", it.name, ver, note, tag_suffix(it));
             }
             let _ = writeln!(out);
         }
     }
     out
+}
+
+/// Format an item's tags as a trailing ` _[a, b]_` marker.
+fn tag_suffix(it: &crate::model::Item) -> String {
+    if it.tags.is_empty() {
+        String::new()
+    } else {
+        format!("  _[{}]_", it.tags.join(", "))
+    }
+}
+
+/// A "Tagged Views" section: each tag lists the items carrying it, so a saved
+/// view (e.g. "favorites") is legible straight from the ledger.
+fn write_tagged_views(out: &mut String, inv: &Inventory) {
+    let mut by_tag: BTreeMap<&str, Vec<&crate::model::Item>> = BTreeMap::new();
+    for it in &inv.items {
+        for tag in &it.tags {
+            by_tag.entry(tag.as_str()).or_default().push(it);
+        }
+    }
+    if by_tag.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "## Tagged Views");
+    let _ = writeln!(out);
+    for (tag, items) in &by_tag {
+        let _ = writeln!(out, "### #{} ({})", tag, items.len());
+        let _ = writeln!(out);
+        for it in items {
+            let ver = it.version.as_deref().map(|v| format!(" `{v}`")).unwrap_or_default();
+            let _ = writeln!(out, "- **{}**{} · _{}_", it.name, ver, it.collector);
+        }
+        let _ = writeln!(out);
+    }
+    let _ = writeln!(out, "---");
+    let _ = writeln!(out);
 }
 
 fn write_projects(out: &mut String, items: &[&crate::model::Item]) {
@@ -94,6 +132,9 @@ fn write_projects(out: &mut String, items: &[&crate::model::Item]) {
         }
         if let Some(why) = it.why.as_deref().filter(|s| !s.is_empty()) {
             let _ = writeln!(out, "- Note: {why}");
+        }
+        if !it.tags.is_empty() {
+            let _ = writeln!(out, "- Tags: {}", it.tags.join(", "));
         }
         let _ = writeln!(out);
     }

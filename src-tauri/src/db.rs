@@ -49,6 +49,12 @@ impl Db {
                 why        TEXT,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS tags (
+                item_key TEXT NOT NULL,
+                tag      TEXT NOT NULL,
+                PRIMARY KEY (item_key, tag)
+            );
+            CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
             "#,
         )?;
         Ok(())
@@ -164,13 +170,55 @@ impl Db {
                 metadata: serde_json::from_str(&meta_str).unwrap_or_else(|_| serde_json::json!({})),
                 note: r.get(8)?,
                 why: r.get(9)?,
+                tags: Vec::new(),
             })
         })?;
         let mut items = Vec::new();
         for row in rows {
             items.push(row?);
         }
+        // Attach tags from the tags table.
+        let tag_map = self.all_tags()?;
+        for it in items.iter_mut() {
+            if let Some(tags) = tag_map.get(&it.item_key) {
+                it.tags = tags.clone();
+            }
+        }
         Ok(items)
+    }
+
+    /// item_key -> sorted list of tags.
+    fn all_tags(&self) -> Result<std::collections::HashMap<String, Vec<String>>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT item_key, tag FROM tags ORDER BY tag COLLATE NOCASE")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        let mut map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        for row in rows {
+            let (key, tag) = row?;
+            map.entry(key).or_default().push(tag);
+        }
+        Ok(map)
+    }
+
+    /// Replace all tags for an item with the given set.
+    pub fn set_item_tags(&self, item_key: &str, tags: &[String]) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM tags WHERE item_key = ?1", params![item_key])?;
+        let mut seen = std::collections::HashSet::new();
+        for tag in tags {
+            let tag = tag.trim();
+            if tag.is_empty() || !seen.insert(tag.to_lowercase()) {
+                continue;
+            }
+            self.conn.execute(
+                "INSERT OR IGNORE INTO tags (item_key, tag) VALUES (?1, ?2)",
+                params![item_key, tag],
+            )?;
+        }
+        Ok(())
     }
 
     pub fn set_note(&self, item_key: &str, note: &str, why: &str) -> Result<()> {
@@ -191,5 +239,44 @@ fn parse_domain(s: &str) -> Domain {
         "project" => Domain::Project,
         "container" => Domain::Container,
         _ => Domain::AiAgent,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Domain, Item};
+
+    #[test]
+    fn tags_persist_and_export() {
+        let path = std::env::temp_dir().join(format!("io-inv-test-{}.sqlite", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let mut db = Db::open(&path).unwrap();
+
+        let ripgrep = Item::new(Domain::PackageManager, "homebrew", "ripgrep").version("14.1.0");
+        let jq = Item::new(Domain::PackageManager, "homebrew", "jq");
+        let key = ripgrep.item_key.clone();
+        db.save_scan("host", "macOS", "t0", "t1", 100, &[ripgrep, jq]).unwrap();
+
+        // Assign tags, then read back.
+        db.set_item_tags(&key, &["favorite".into(), "cli".into()]).unwrap();
+        let inv = db.latest_inventory().unwrap().unwrap();
+        let tagged = inv.items.iter().find(|i| i.item_key == key).unwrap();
+        assert_eq!(tagged.tags, vec!["cli".to_string(), "favorite".to_string()]);
+
+        // Export includes a Tagged Views section.
+        let md = crate::export::to_agent_map(&inv);
+        assert!(md.contains("## Tagged Views"), "export missing Tagged Views:\n{md}");
+        assert!(md.contains("#favorite"), "export missing #favorite tag");
+        assert!(md.contains("**ripgrep**"), "export missing item");
+
+        // Replacing tags removes old ones.
+        db.set_item_tags(&key, &["favorite".into()]).unwrap();
+        let inv2 = db.latest_inventory().unwrap().unwrap();
+        let t2 = inv2.items.iter().find(|i| i.item_key == key).unwrap();
+        assert_eq!(t2.tags, vec!["favorite".to_string()]);
+
+        let _ = std::fs::remove_file(&path);
+        println!("tags_persist_and_export OK");
     }
 }

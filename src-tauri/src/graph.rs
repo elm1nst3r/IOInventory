@@ -85,6 +85,7 @@ pub fn build(inv: &Inventory) -> Graph {
                         "metadata": item.metadata,
                         "note": item.note,
                         "why": item.why,
+                        "tags": item.tags,
                         "collector": item.collector,
                     }),
                 });

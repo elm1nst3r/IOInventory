@@ -96,6 +96,33 @@ pub async fn enrich_item(
     serde_json::to_value(e).unwrap_or_else(|_| serde_json::json!({}))
 }
 
+/// What update/uninstall actions are available for an item.
+#[tauri::command]
+pub fn item_actions(collector: String, name: String) -> crate::manage::ActionInfo {
+    crate::manage::info(&collector, &name)
+}
+
+/// Run an update or delete action for a single item. `action` is "update" or "delete".
+#[tauri::command]
+pub async fn run_item_action(
+    collector: String,
+    name: String,
+    action: String,
+) -> crate::manage::ActionResult {
+    crate::manage::run(&collector, &name, &action).await
+}
+
+/// Replace the tags on an item (persisted across re-scans).
+#[tauri::command]
+pub async fn set_item_tags(
+    state: State<'_, AppState>,
+    item_key: String,
+    tags: Vec<String>,
+) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    db.set_item_tags(&item_key, &tags).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn list_cleanups() -> Vec<CleanupAction> {
     cleanup::list()

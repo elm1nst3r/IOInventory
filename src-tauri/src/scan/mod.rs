@@ -89,7 +89,30 @@ mod tests {
             .iter()
             .filter(|i| i.metadata.get("outdated").and_then(|o| o.as_bool()).unwrap_or(false))
             .count();
-        println!("outdated (brew/npm): {outdated}");
+        let deprecated = items
+            .iter()
+            .filter(|i| i.metadata.get("deprecated").and_then(|o| o.as_bool()).unwrap_or(false))
+            .count();
+        println!("outdated (brew/npm): {outdated} · deprecated (brew): {deprecated}");
+
+        // Homebrew size coverage + top 3 largest formulae.
+        let mut brew_sized: Vec<(&str, i64)> = items
+            .iter()
+            .filter(|i| i.collector == "homebrew")
+            .filter_map(|i| i.size_bytes.map(|b| (i.name.as_str(), b)))
+            .collect();
+        brew_sized.sort_by(|a, b| b.1.cmp(&a.1));
+        println!(
+            "brew formulae with size: {} · top: {:?}",
+            brew_sized.len(),
+            brew_sized.iter().take(3).map(|(n, b)| format!("{n}={}MB", b / 1_000_000)).collect::<Vec<_>>()
+        );
+
+        // Per-item management info for a Homebrew formula (no destructive run).
+        if let Some(f) = items.iter().find(|i| i.collector == "homebrew") {
+            let a = crate::manage::info("homebrew", &f.name);
+            println!("manage {} -> update={:?} delete={:?} available={}", f.name, a.update, a.delete, a.available);
+        }
 
         // Enrich one Homebrew formula end-to-end.
         if let Some(f) = items.iter().find(|i| i.collector == "homebrew") {

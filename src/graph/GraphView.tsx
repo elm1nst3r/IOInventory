@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useStore } from "../store";
 import { formatBytes } from "../lib/api";
+import { passesFilters, itemInView } from "../lib/filters";
 import type { Graph as GraphData, GraphNode } from "../lib/types";
 
 const elk = new ELK();
@@ -156,6 +157,9 @@ export default function GraphView() {
   const theme = useStore((s) => s.theme);
   const layout = useStore((s) => s.layout);
   const setLayout = useStore((s) => s.setLayout);
+  const filters = useStore((s) => s.filters);
+  const activeView = useStore((s) => s.activeView);
+  const inventory = useStore((s) => s.inventory);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -182,7 +186,40 @@ export default function GraphView() {
       setEdges([]);
       return;
     }
+    // "Restricted" means either quick-filters or a saved view is active; in
+    // that mode we show every matching item and prune empty collectors/domains.
+    const filtersActive = filters.size > 0 || activeView !== null;
+    const matchItems = new Set<string>();
+    const matchCollectors = new Set<string>();
+    const matchDomains = new Set<string>();
+    if (filtersActive) {
+      // Match against the live inventory (always current, incl. just-added tags)
+      // rather than graph-node metadata baked in at scan time.
+      const matchKeys = new Set(
+        (inventory?.items ?? [])
+          .filter((i) => passesFilters(i, filters) && itemInView(i, activeView))
+          .map((i) => i.item_key),
+      );
+      for (const n of graph.nodes) {
+        if (n.kind === "item" && matchKeys.has(n.id)) {
+          matchItems.add(n.id);
+          if (n.parent) matchCollectors.add(n.parent);
+        }
+      }
+      for (const n of graph.nodes) {
+        if (n.kind === "collector" && matchCollectors.has(n.id) && n.parent) {
+          matchDomains.add(n.parent);
+        }
+      }
+    }
+
     const visible = graph.nodes.filter((n) => {
+      if (filtersActive) {
+        if (n.kind === "item") return matchItems.has(n.id);
+        if (n.kind === "collector") return matchCollectors.has(n.id);
+        if (n.kind === "domain") return matchDomains.has(n.id);
+        return true; // root
+      }
       if (n.kind === "item") return n.parent && expanded.has(n.parent);
       return true;
     });
@@ -252,7 +289,7 @@ export default function GraphView() {
     return () => {
       cancelled = true;
     };
-  }, [graph, expanded, selectedKey, collectorsWithItems, layout]);
+  }, [graph, expanded, selectedKey, collectorsWithItems, layout, filters, activeView, inventory]);
 
   const onNodeClick = useCallback(
     (_: any, node: Node) => {
