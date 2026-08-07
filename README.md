@@ -73,12 +73,17 @@ installed, why it's there, whether it's up to date, and what's safe to clean up.
   those items in both the graph and the list.
 - 🔬 **Filter & sort** — quick filters (**update available / deprecated / noted**), a category
   multi-select, and sort by name or size — all composable with search.
+- 🕑 **Snapshots & diff** — save the current environment (or **import** a portable
+  `.ioinv.json`), **view** any past state read-only, and **compare** it to your current scan
+  (added / missing / version-changed).
+- 📦 **Bulk install from a diff** — select the package-manager items a snapshot has but you're
+  missing (Homebrew, npm, pip, …) and **install them all** in one click, with live progress.
 - 📝 **Notes** — jot *why* something is installed; notes and tags persist across re-scans.
 - 🧰 **Utilities** — one-click, allowlisted **updates** (`brew`, `npm`, `rustup`, `pipx`,
   `cargo`, `gh`, or "update everything") and **cleanups** (brew/docker/cache), each with a
   **dry-run preview and confirm** — nothing destructive runs blind.
-- 📄 **Export `AGENT_MAP.md`** — a human-readable ledger of your whole environment, including a
-  **Tagged Views** section.
+- 📄 **Export** — a human-readable **`AGENT_MAP.md`** ledger (with a Tagged Views section) or a
+  machine-readable **`.ioinv.json`** snapshot you can re-import elsewhere.
 - 🌗 **Light & dark** blueprint-blue theme.
 - 🔒 **100% local** — no network calls, no telemetry. Config scans detect the *presence* of API
   keys, never their values.
@@ -119,10 +124,12 @@ Results land in **SQLite**; a **React + React Flow** UI renders the graph. A ful
 typical machine completes in **~2 seconds**.
 
 ```
-src-tauri/src/scan/   → one module per collector + concurrent orchestrator
-src-tauri/src/db.rs   → SQLite schema, migrations, note persistence
-src-tauri/src/graph.rs→ builds the node/edge graph from an inventory
-src-tauri/src/*.rs    → cleanup (allowlisted), export, Tauri commands
+src-tauri/src/scan/     → one module per collector + concurrent orchestrator
+src-tauri/src/db.rs     → SQLite schema, migrations, notes/tags/snapshots
+src-tauri/src/graph.rs  → builds the node/edge graph from an inventory
+src-tauri/src/manage.rs → allowlisted per-item install / update / uninstall
+src-tauri/src/snapshot.rs → snapshot file format + diff engine
+src-tauri/src/*.rs      → cleanup, export, Tauri commands
 src/                  → React UI: GraphView, ListView, DetailPanel, CleanupPanel
 ```
 
@@ -134,10 +141,10 @@ cd src-tauri && cargo test scan_smoke -- --nocapture
 
 ## 🗺️ Roadmap
 
-- [ ] **Import** — load a previously exported inventory/ledger, and save/restore **static views**
-      (named, frozen versions of the lists) so you can snapshot and diff your environment over time
+- [x] **Snapshots & import** — save/import states, view them read-only, and diff against the current scan
+- [x] **Install from the app** — per-item install plus bulk-install missing items from a diff
 - [ ] **Fix the logo & app icon** — polish the blueprint icon and its packaging across sizes/platforms
-- [ ] Install new packages (not just update/uninstall) from the app
+- [ ] Diff two snapshots directly (not just snapshot ↔ current); bulk-uninstall from a diff
 - [ ] Agent-driven self-updates — a CLI + Claude Code hook that appends to the ledger automatically
 - [ ] Background / scheduled scans
 - [ ] Windows package managers (winget / scoop / choco) + code signing
