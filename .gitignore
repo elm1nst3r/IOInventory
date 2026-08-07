@@ -13,6 +13,9 @@ dist-ssr
 dist-release
 *.local
 
+# Local Claude Code guidance — not for the public repo
+CLAUDE.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
