@@ -33,6 +33,20 @@ repos, and AI agents that quietly pile up on a developer's machine.
 
 ---
 
+## 📸 Screenshots
+
+**Architecture view** — a radial map of your whole environment (`This Mac → domains → tools → items`), with saved views and quick filters.
+
+![Architecture / radial graph view](docs/screenshots/architecture.png)
+
+**List view** — filter, sort by size, tag your favorites, and update/uninstall in place from the detail panel.
+
+![List view with detail panel](docs/screenshots/list.png)
+
+<sub>Screenshots use a generic sample environment for illustration.</sub>
+
+---
+
 ## Why?
 
 As development shifts toward AI-agent workflows, your machine quietly fills up with **skills,
