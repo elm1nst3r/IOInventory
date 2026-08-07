@@ -57,6 +57,10 @@ literal black box.
 **IO Inventory scans your system in ~2 seconds and lays it all out**, so you always know what's
 installed, why it's there, whether it's up to date, and what's safe to clean up.
 
+And when you move to a new computer, you don't have to start from scratch: **save your setup as
+a snapshot, then re-implement it on the new machine** — compare the snapshot to a fresh scan and
+bulk-install everything you're missing.
+
 ## ✨ Features
 
 - 🗺️ **Interactive architecture graph** — a radial map of `This Mac → domains → tools → items`,
