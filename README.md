@@ -88,6 +88,8 @@ bulk-install everything you're missing.
   **dry-run preview and confirm** — nothing destructive runs blind.
 - 📄 **Export** — a human-readable **`AGENT_MAP.md`** ledger (with a Tagged Views section) or a
   machine-readable **`.ioinv.json`** snapshot you can re-import elsewhere.
+- 🔄 **In-app auto-update** — checks GitHub on launch, then downloads, **cryptographically verifies**,
+  installs, and relaunches new versions in place.
 - 🌗 **Light & dark** blueprint-blue theme.
 - 🔒 **100% local** — no network calls, no telemetry. Config scans detect the *presence* of API
   keys, never their values.
@@ -119,6 +121,9 @@ Build a distributable:
 ```bash
 npm run tauri build    # → .app / .dmg (macOS) or .msi / .exe (Windows)
 ```
+
+Installed builds (v0.9.1+) **update themselves** — the app checks GitHub on launch and offers a
+one-click, signature-verified install of any newer release.
 
 ## 🏗️ How it works
 
