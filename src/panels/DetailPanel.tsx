@@ -84,6 +84,7 @@ function ItemDetail({
 
   const setItemTags = useStore((s) => s.setItemTags);
   const setView = useStore((s) => s.setView);
+  const readOnly = useStore((s) => s.viewingSnapshot !== null);
   // NOTE: derive with useMemo — a selector that returns a fresh array each call
   // sends useSyncExternalStore into an infinite render loop.
   const inventoryItems = useStore((s) => s.inventory?.items);
@@ -207,7 +208,7 @@ function ItemDetail({
         </div>
       )}
 
-      {actions && (actions.update || actions.delete) && (
+      {!readOnly && actions && (actions.update || actions.delete) && (
         <div className="manage">
           <div className="manage-btns">
             {actions.update && (
@@ -316,44 +317,59 @@ function ItemDetail({
               >
                 #{t}
               </button>
-              <button className="tag-x" title="Remove tag" onClick={() => removeTag(t)}>
-                <X size={11} />
-              </button>
+              {!readOnly && (
+                <button className="tag-x" title="Remove tag" onClick={() => removeTag(t)}>
+                  <X size={11} />
+                </button>
+              )}
             </span>
           ))}
-          {tags.length === 0 && <span className="tag-empty">No tags yet</span>}
+          {tags.length === 0 && <span className="tag-empty">No tags</span>}
         </div>
-        <input
-          className="tag-input"
-          list="tag-suggestions"
-          value={tagInput}
-          placeholder="Add a tag (e.g. favorite) and press Enter"
-          onChange={(e) => setTagInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault();
-              addTag(tagInput);
-            }
-          }}
-        />
-        <datalist id="tag-suggestions">
-          {allTagSuggestions.map((t) => (
-            <option key={t} value={t} />
-          ))}
-        </datalist>
+        {!readOnly && (
+          <>
+            <input
+              className="tag-input"
+              list="tag-suggestions"
+              value={tagInput}
+              placeholder="Add a tag (e.g. favorite) and press Enter"
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTag(tagInput);
+                }
+              }}
+            />
+            <datalist id="tag-suggestions">
+              {allTagSuggestions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+          </>
+        )}
       </div>
 
-      <div className="note-editor">
-        <label>Why is this here? (note)</label>
-        <textarea
-          value={why}
-          placeholder="e.g. used by the Faceswap project for GPU inference"
-          onChange={(e) => setWhy(e.target.value)}
-        />
-        <button className="btn btn-primary" onClick={save}>
-          {saved ? "Saved ✓" : "Save note"}
-        </button>
-      </div>
+      {readOnly ? (
+        why ? (
+          <div className="note-editor">
+            <label>Why is this here? (note)</label>
+            <p className="detail-desc">{why}</p>
+          </div>
+        ) : null
+      ) : (
+        <div className="note-editor">
+          <label>Why is this here? (note)</label>
+          <textarea
+            value={why}
+            placeholder="e.g. used by the Faceswap project for GPU inference"
+            onChange={(e) => setWhy(e.target.value)}
+          />
+          <button className="btn btn-primary" onClick={save}>
+            {saved ? "Saved ✓" : "Save note"}
+          </button>
+        </div>
+      )}
     </aside>
   );
 }

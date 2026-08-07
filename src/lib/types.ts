@@ -89,6 +89,40 @@ export interface ActionResult {
   success: boolean;
 }
 
+export interface SnapshotMeta {
+  id: number;
+  name: string;
+  created_at: string;
+  host: string;
+  os: string;
+  item_count: number;
+  source: string; // "scan" | "import"
+}
+
+export interface DiffItem {
+  name: string;
+  collector: string;
+  domain: Domain;
+  version?: string | null;
+}
+
+export interface DiffChange {
+  name: string;
+  collector: string;
+  domain: Domain;
+  old_version?: string | null;
+  new_version?: string | null;
+}
+
+export interface Diff {
+  base_label: string;
+  target_label: string;
+  added: DiffItem[];
+  removed: DiffItem[];
+  changed: DiffChange[];
+  unchanged: number;
+}
+
 export interface Enrichment {
   description?: string | null;
   homepage?: string | null;

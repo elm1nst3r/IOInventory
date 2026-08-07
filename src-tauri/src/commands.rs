@@ -156,6 +156,129 @@ pub fn set_roots(state: State<'_, AppState>, roots: Vec<String>) {
     *guard = roots.into_iter().map(PathBuf::from).collect();
 }
 
+// ---- Snapshots ----
+
+use crate::model::{Diff, SnapshotMeta};
+use crate::snapshot;
+
+/// Save the current inventory as a named snapshot.
+#[tauri::command]
+pub async fn save_snapshot(state: State<'_, AppState>, name: String) -> Result<SnapshotMeta, String> {
+    let inv = {
+        let db = state.db.lock().unwrap();
+        db.latest_inventory().map_err(|e| e.to_string())?
+    }
+    .ok_or("no inventory to snapshot — run a scan first")?;
+    let name = if name.trim().is_empty() {
+        format!("Snapshot {}", chrono::Local::now().format("%Y-%m-%d %H:%M"))
+    } else {
+        name.trim().to_string()
+    };
+    let created_at = chrono::Utc::now().to_rfc3339();
+    let db = state.db.lock().unwrap();
+    db.save_snapshot(&name, &created_at, &inv.scan.host, &inv.scan.os, "scan", &inv.items)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn list_snapshots(state: State<'_, AppState>) -> Result<Vec<SnapshotMeta>, String> {
+    let db = state.db.lock().unwrap();
+    db.list_snapshots().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_snapshot_inventory(
+    state: State<'_, AppState>,
+    id: i64,
+) -> Result<Inventory, String> {
+    let (meta, items) = {
+        let db = state.db.lock().unwrap();
+        db.get_snapshot(id).map_err(|e| e.to_string())?
+    }
+    .ok_or("snapshot not found")?;
+    Ok(snapshot::to_inventory(&meta, items))
+}
+
+#[tauri::command]
+pub async fn get_snapshot_graph(state: State<'_, AppState>, id: i64) -> Result<Graph, String> {
+    let (meta, items) = {
+        let db = state.db.lock().unwrap();
+        db.get_snapshot(id).map_err(|e| e.to_string())?
+    }
+    .ok_or("snapshot not found")?;
+    Ok(graph::build(&snapshot::to_inventory(&meta, items)))
+}
+
+#[tauri::command]
+pub async fn delete_snapshot(state: State<'_, AppState>, id: i64) -> Result<(), String> {
+    let db = state.db.lock().unwrap();
+    db.delete_snapshot(id).map_err(|e| e.to_string())
+}
+
+/// Diff a snapshot (base) against the current inventory (target).
+#[tauri::command]
+pub async fn diff_snapshot(state: State<'_, AppState>, id: i64) -> Result<Diff, String> {
+    let (snap, current) = {
+        let db = state.db.lock().unwrap();
+        let snap = db.get_snapshot(id).map_err(|e| e.to_string())?.ok_or("snapshot not found")?;
+        let current = db.latest_inventory().map_err(|e| e.to_string())?.ok_or("no current scan to compare")?;
+        (snap, current)
+    };
+    let (meta, base_items) = snap;
+    let label = format!("{} · {}", meta.name, &meta.created_at.chars().take(10).collect::<String>());
+    Ok(snapshot::diff(&base_items, &current.items, &label, "Current scan"))
+}
+
+/// Export a snapshot (by id) or the current inventory (id = None) as a
+/// portable `.ioinv.json` file in the user's documents folder.
+#[tauri::command]
+pub async fn export_snapshot(
+    state: State<'_, AppState>,
+    id: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let file = {
+        let db = state.db.lock().unwrap();
+        match id {
+            Some(id) => {
+                let (meta, items) = db.get_snapshot(id).map_err(|e| e.to_string())?.ok_or("snapshot not found")?;
+                snapshot::SnapshotFile::new(&meta.name, &meta.created_at, &meta.host, &meta.os, items)
+            }
+            None => {
+                let inv = db.latest_inventory().map_err(|e| e.to_string())?.ok_or("no inventory to export")?;
+                let name = format!("Current {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+                snapshot::SnapshotFile::new(&name, &chrono::Utc::now().to_rfc3339(), &inv.scan.host, &inv.scan.os, inv.items)
+            }
+        }
+    };
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let dir = dirs::document_dir().unwrap_or_else(scan::util::home);
+    let path = dir.join(format!("IOInventory-{stamp}.ioinv.json"));
+    let json = serde_json::to_string_pretty(&file).map_err(|e| e.to_string())?;
+    std::fs::write(&path, &json).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "path": path.to_string_lossy() }))
+}
+
+/// Import a snapshot from raw `.ioinv.json` content and store it.
+#[tauri::command]
+pub async fn import_snapshot(
+    state: State<'_, AppState>,
+    content: String,
+    name: Option<String>,
+) -> Result<SnapshotMeta, String> {
+    let file = snapshot::parse_import(&content)?;
+    let name = name
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| file.name.clone());
+    let created_at = if file.created_at.is_empty() {
+        chrono::Utc::now().to_rfc3339()
+    } else {
+        file.created_at.clone()
+    };
+    let db = state.db.lock().unwrap();
+    db.save_snapshot(&name, &created_at, &file.host, &file.os, "import", &file.items)
+        .map_err(|e| e.to_string())
+}
+
 /// Generate AGENT_MAP.md from the latest inventory, write it to the user's
 /// documents folder, and return { path, content }.
 #[tauri::command]

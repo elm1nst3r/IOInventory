@@ -1,5 +1,18 @@
-import { useEffect, useState } from "react";
-import { RefreshCw, Network, List, Wrench, FileDown, Search, Sun, Moon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  RefreshCw,
+  Network,
+  List,
+  Wrench,
+  History,
+  FileDown,
+  Search,
+  Sun,
+  Moon,
+  ChevronDown,
+  Eye,
+  X,
+} from "lucide-react";
 import { useStore } from "./store";
 import { api } from "./lib/api";
 import GraphView from "./graph/GraphView";
@@ -7,6 +20,7 @@ import ListView from "./views/ListView";
 import DetailPanel from "./panels/DetailPanel";
 import CleanupPanel from "./panels/CleanupPanel";
 import FilterBar from "./panels/FilterBar";
+import SnapshotsPanel from "./panels/SnapshotsPanel";
 import "./App.css";
 
 export default function App() {
@@ -18,25 +32,52 @@ export default function App() {
     tab,
     search,
     theme,
+    viewingSnapshot,
     init,
     scan,
     setTab,
     setSearch,
     toggleTheme,
+    exitSnapshot,
   } = useStore();
-  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     init();
   }, [init]);
 
-  async function doExport() {
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [exportOpen]);
+
+  function flash(text: string) {
+    setMsg(text);
+    setTimeout(() => setMsg(null), 4500);
+  }
+
+  async function exportLedger() {
+    setExportOpen(false);
     try {
       const { path } = await api.exportAgentMap();
-      setExportMsg(`Saved to ${path}`);
-      setTimeout(() => setExportMsg(null), 4000);
+      flash(`Ledger saved to ${path}`);
     } catch (e) {
-      setExportMsg(String(e));
+      flash(String(e));
+    }
+  }
+  async function exportSnapshotFile() {
+    setExportOpen(false);
+    try {
+      const { path } = await api.exportSnapshot(viewingSnapshot?.id ?? null);
+      flash(`Snapshot exported to ${path}`);
+    } catch (e) {
+      flash(String(e));
     }
   }
 
@@ -60,6 +101,9 @@ export default function App() {
           <button className={tab === "cleanup" ? "active" : ""} onClick={() => setTab("cleanup")}>
             <Wrench size={15} /> Utilities
           </button>
+          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+            <History size={15} /> History
+          </button>
         </nav>
 
         {tab === "list" && (
@@ -74,7 +118,7 @@ export default function App() {
         )}
 
         <div className="topbar-right">
-          {scan_ && (
+          {scan_ && !viewingSnapshot && (
             <span className="scan-info">
               {scan_.item_count} items · {(scan_.duration_ms / 1000).toFixed(1)}s
             </span>
@@ -86,15 +130,33 @@ export default function App() {
           >
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
+
+          <div className="ms" ref={exportRef}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setExportOpen((o) => !o)}
+              disabled={!inventory}
+            >
+              <FileDown size={15} /> Export <ChevronDown size={13} />
+            </button>
+            {exportOpen && (
+              <div className="ms-panel export-menu">
+                <button className="ms-row" onClick={exportLedger}>
+                  Ledger (AGENT_MAP.md)
+                </button>
+                <button className="ms-row" onClick={exportSnapshotFile}>
+                  {viewingSnapshot ? "This snapshot" : "Snapshot"} (.ioinv.json)
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
-            className="btn btn-ghost"
-            onClick={doExport}
-            disabled={!inventory}
-            title="Export AGENT_MAP.md"
+            className="btn btn-primary"
+            onClick={scan}
+            disabled={scanning || !!viewingSnapshot}
+            title={viewingSnapshot ? "Exit the snapshot to scan" : "Scan your machine"}
           >
-            <FileDown size={15} /> Export
-          </button>
-          <button className="btn btn-primary" onClick={scan} disabled={scanning}>
             <RefreshCw size={15} className={scanning ? "spin" : ""} />
             {scanning ? "Scanning…" : "Scan"}
           </button>
@@ -102,11 +164,22 @@ export default function App() {
       </header>
 
       {error && <div className="banner error">{error}</div>}
-      {exportMsg && <div className="banner info">{exportMsg}</div>}
+      {msg && <div className="banner info">{msg}</div>}
+      {viewingSnapshot && (
+        <div className="banner snapshot">
+          <Eye size={14} /> Viewing snapshot <strong>{viewingSnapshot.name}</strong> ·{" "}
+          {viewingSnapshot.created_at.slice(0, 10)} · read-only
+          <button className="banner-exit" onClick={exitSnapshot}>
+            <X size={13} /> Exit to live
+          </button>
+        </div>
+      )}
 
       <main className="main">
         {loading ? (
           <div className="empty-hint">Loading…</div>
+        ) : tab === "history" ? (
+          <SnapshotsPanel />
         ) : tab === "cleanup" ? (
           <CleanupPanel />
         ) : (

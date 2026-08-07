@@ -5,10 +5,12 @@ import type {
   CleanupAction,
   CleanupPreview,
   CleanupResult,
+  Diff,
   Enrichment,
   Graph,
   Inventory,
   Item,
+  SnapshotMeta,
 } from "./types";
 
 export const api = {
@@ -27,7 +29,7 @@ export const api = {
     }),
   itemActions: (collector: string, name: string) =>
     invoke<ActionInfo>("item_actions", { collector, name }),
-  runItemAction: (collector: string, name: string, action: "update" | "delete") =>
+  runItemAction: (collector: string, name: string, action: "update" | "delete" | "install") =>
     invoke<ActionResult>("run_item_action", { collector, name, action }),
   listCleanups: () => invoke<CleanupAction[]>("list_cleanups"),
   previewCleanup: (id: string) => invoke<CleanupPreview>("preview_cleanup", { id }),
@@ -35,6 +37,18 @@ export const api = {
   getRoots: () => invoke<string[]>("get_roots"),
   setRoots: (roots: string[]) => invoke<void>("set_roots", { roots }),
   exportAgentMap: () => invoke<{ path: string; content: string }>("export_agent_map"),
+
+  // Snapshots
+  saveSnapshot: (name: string) => invoke<SnapshotMeta>("save_snapshot", { name }),
+  listSnapshots: () => invoke<SnapshotMeta[]>("list_snapshots"),
+  getSnapshotInventory: (id: number) => invoke<Inventory>("get_snapshot_inventory", { id }),
+  getSnapshotGraph: (id: number) => invoke<Graph>("get_snapshot_graph", { id }),
+  deleteSnapshot: (id: number) => invoke<void>("delete_snapshot", { id }),
+  diffSnapshot: (id: number) => invoke<Diff>("diff_snapshot", { id }),
+  exportSnapshot: (id: number | null) =>
+    invoke<{ path: string }>("export_snapshot", { id }),
+  importSnapshot: (content: string, name: string | null) =>
+    invoke<SnapshotMeta>("import_snapshot", { content, name }),
 };
 
 export function formatBytes(bytes?: number | null): string {

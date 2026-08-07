@@ -1187,6 +1187,299 @@ body,
   background: var(--danger);
 }
 
+/* ---- Export dropdown menu ---- */
+.export-menu {
+  right: 0;
+  left: auto;
+  width: 220px;
+}
+.export-menu .ms-row {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* ---- Snapshot banner ---- */
+.banner.snapshot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-1));
+  color: var(--text);
+  border-bottom: 1px solid var(--accent);
+  font-size: 13px;
+}
+.banner-exit {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.banner-exit:hover {
+  border-color: var(--accent);
+}
+
+/* ---- History / Snapshots panel ---- */
+.snapshots {
+  height: 100%;
+  overflow-y: auto;
+  padding: 22px 26px;
+}
+.snap-head h2 {
+  margin: 0 0 4px;
+}
+.snap-head p {
+  margin: 0 0 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+  max-width: 780px;
+  line-height: 1.5;
+}
+.snap-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.snap-name {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 13px;
+  width: 240px;
+}
+.snap-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.snap-msg {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.snap-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 18px;
+  align-items: start;
+}
+.snap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.snap-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.snap-card.active {
+  border-color: var(--accent);
+}
+.snap-card-main {
+  flex: 1;
+  min-width: 0;
+}
+.snap-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+.snap-src {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  color: var(--text-dim);
+  border: 1px solid var(--line-2);
+}
+.snap-src.import {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+}
+.snap-card-meta {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 3px;
+}
+.snap-card-actions {
+  display: flex;
+  gap: 2px;
+}
+.snap-card-actions button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+}
+.snap-card-actions button:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+.snap-card-actions button.danger:hover {
+  color: var(--danger);
+}
+.snap-diff {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  min-height: 340px;
+  padding: 16px 18px;
+}
+
+/* ---- Diff ---- */
+.diff-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.diff-base {
+  color: var(--text-dim);
+}
+.diff-summary {
+  display: flex;
+  gap: 14px;
+  font-size: 12.5px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.d-add {
+  color: var(--ok);
+}
+.d-rem {
+  color: #ffb020;
+}
+.d-chg {
+  color: var(--accent-2);
+}
+.d-same {
+  color: var(--text-faint);
+}
+.diff-sec {
+  margin-bottom: 18px;
+}
+.diff-sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.diff-sec-head h4 {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.install-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sel-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.sel-all input,
+.diff-row input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.install-progress,
+.install-results {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.diff-rows {
+  display: flex;
+  flex-direction: column;
+}
+.diff-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.diff-row.installable {
+  cursor: pointer;
+}
+.diff-row.installable:hover {
+  background: var(--bg-2);
+}
+.diff-nobox {
+  width: 13px;
+  flex-shrink: 0;
+}
+.diff-name {
+  font-weight: 500;
+}
+.diff-ver {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+}
+.diff-ver.new {
+  color: var(--accent-2);
+}
+.diff-col {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.diff-res {
+  font-size: 11px;
+  font-weight: 600;
+}
+.diff-res.ok {
+  color: var(--ok);
+}
+.diff-res.fail {
+  color: var(--danger);
+}
+.diff-empty {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  padding: 6px;
+}
+@media (max-width: 900px) {
+  .snap-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 10px;

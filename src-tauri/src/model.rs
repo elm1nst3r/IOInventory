@@ -154,6 +154,50 @@ pub struct Graph {
 
 // ---- Cleanup actions ----
 
+// ---- Snapshots & diff ----
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotMeta {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub host: String,
+    pub os: String,
+    pub item_count: i64,
+    /// "scan" (saved from a live scan) or "import" (loaded from a file).
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffItem {
+    pub name: String,
+    pub collector: String,
+    pub domain: Domain,
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffChange {
+    pub name: String,
+    pub collector: String,
+    pub domain: Domain,
+    pub old_version: Option<String>,
+    pub new_version: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Diff {
+    pub base_label: String,
+    pub target_label: String,
+    /// In target but not base (installed since the snapshot).
+    pub added: Vec<DiffItem>,
+    /// In base but not target (removed since the snapshot).
+    pub removed: Vec<DiffItem>,
+    /// Same item, different version.
+    pub changed: Vec<DiffChange>,
+    pub unchanged: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanupAction {
     pub id: String,

@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { api } from "./lib/api";
-import type { Enrichment, Graph, Inventory, Item } from "./lib/types";
+import type { Enrichment, Graph, Inventory, Item, SnapshotMeta } from "./lib/types";
 
-type Tab = "graph" | "list" | "cleanup";
+type Tab = "graph" | "list" | "cleanup" | "history";
 type Theme = "dark" | "light";
 type Layout = "radial" | "tree";
 
@@ -30,6 +30,11 @@ interface State {
   activeView: string | null;
   enrichCache: Record<string, Enrichment>;
   enriching: string | null;
+  // Snapshots
+  snapshots: SnapshotMeta[];
+  viewingSnapshot: SnapshotMeta | null;
+  liveInventory: Inventory | null;
+  liveGraph: Graph | null;
 
   init: () => Promise<void>;
   scan: () => Promise<void>;
@@ -44,6 +49,9 @@ interface State {
   setView: (tag: string | null) => void;
   setItemTags: (key: string, tags: string[]) => Promise<void>;
   enrich: (item: Item) => Promise<void>;
+  refreshSnapshots: () => Promise<void>;
+  viewSnapshot: (meta: SnapshotMeta) => Promise<void>;
+  exitSnapshot: () => void;
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -61,16 +69,28 @@ export const useStore = create<State>((set, get) => ({
   activeView: null,
   enrichCache: {},
   enriching: null,
+  snapshots: [],
+  viewingSnapshot: null,
+  liveInventory: null,
+  liveGraph: null,
 
   init: async () => {
     applyTheme(get().theme);
     set({ loading: true });
     try {
-      const [inventory, graph] = await Promise.all([
+      const [inventory, graph, snapshots] = await Promise.all([
         api.getInventory(),
         api.getGraph(),
+        api.listSnapshots(),
       ]);
-      set({ inventory, graph, loading: false });
+      set({
+        inventory,
+        graph,
+        liveInventory: inventory,
+        liveGraph: graph,
+        snapshots,
+        loading: false,
+      });
     } catch (e) {
       set({ error: String(e), loading: false });
     }
@@ -81,7 +101,15 @@ export const useStore = create<State>((set, get) => ({
     try {
       const inventory = await api.scan();
       const graph = await api.getGraph();
-      set({ inventory, graph, scanning: false, enrichCache: {} });
+      set({
+        inventory,
+        graph,
+        liveInventory: inventory,
+        liveGraph: graph,
+        scanning: false,
+        enrichCache: {},
+        viewingSnapshot: null,
+      });
     } catch (e) {
       set({ error: String(e), scanning: false });
     }
@@ -126,7 +154,48 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  refreshSnapshots: async () => {
+    try {
+      set({ snapshots: await api.listSnapshots() });
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  viewSnapshot: async (meta) => {
+    set({ error: null });
+    try {
+      const [inventory, graph] = await Promise.all([
+        api.getSnapshotInventory(meta.id),
+        api.getSnapshotGraph(meta.id),
+      ]);
+      set({
+        inventory,
+        graph,
+        viewingSnapshot: meta,
+        tab: "graph",
+        selectedKey: null,
+        filters: new Set(),
+        activeView: null,
+        enrichCache: {},
+      });
+    } catch (e) {
+      set({ error: String(e) });
+    }
+  },
+
+  exitSnapshot: () => {
+    const { liveInventory, liveGraph } = get();
+    set({
+      inventory: liveInventory,
+      graph: liveGraph,
+      viewingSnapshot: null,
+      selectedKey: null,
+    });
+  },
+
   enrich: async (item) => {
+    if (get().viewingSnapshot) return; // read-only while viewing a snapshot
     if (get().enrichCache[item.item_key]) return;
     set({ enriching: item.item_key });
     try {

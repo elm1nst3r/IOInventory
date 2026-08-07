@@ -6,6 +6,7 @@ mod graph;
 mod manage;
 mod model;
 mod scan;
+mod snapshot;
 
 use commands::AppState;
 use std::sync::Mutex;
@@ -46,6 +47,14 @@ pub fn run() {
             commands::get_roots,
             commands::set_roots,
             commands::export_agent_map,
+            commands::save_snapshot,
+            commands::list_snapshots,
+            commands::get_snapshot_inventory,
+            commands::get_snapshot_graph,
+            commands::delete_snapshot,
+            commands::diff_snapshot,
+            commands::export_snapshot,
+            commands::import_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

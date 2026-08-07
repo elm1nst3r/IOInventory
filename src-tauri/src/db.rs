@@ -1,4 +1,4 @@
-use crate::model::{Domain, Inventory, Item, ScanInfo};
+use crate::model::{Domain, Inventory, Item, ScanInfo, SnapshotMeta};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -55,6 +55,16 @@ impl Db {
                 PRIMARY KEY (item_key, tag)
             );
             CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+            CREATE TABLE IF NOT EXISTS snapshots (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                host       TEXT NOT NULL,
+                os         TEXT NOT NULL,
+                item_count INTEGER NOT NULL,
+                source     TEXT NOT NULL,
+                data_json  TEXT NOT NULL
+            );
             "#,
         )?;
         Ok(())
@@ -218,6 +228,92 @@ impl Db {
                 params![item_key, tag],
             )?;
         }
+        Ok(())
+    }
+
+    // ---- Snapshots ----
+
+    pub fn save_snapshot(
+        &self,
+        name: &str,
+        created_at: &str,
+        host: &str,
+        os: &str,
+        source: &str,
+        items: &[Item],
+    ) -> Result<SnapshotMeta> {
+        let data = serde_json::to_string(items)?;
+        self.conn.execute(
+            "INSERT INTO snapshots (name, created_at, host, os, item_count, source, data_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![name, created_at, host, os, items.len() as i64, source, data],
+        )?;
+        Ok(SnapshotMeta {
+            id: self.conn.last_insert_rowid(),
+            name: name.into(),
+            created_at: created_at.into(),
+            host: host.into(),
+            os: os.into(),
+            item_count: items.len() as i64,
+            source: source.into(),
+        })
+    }
+
+    pub fn list_snapshots(&self) -> Result<Vec<SnapshotMeta>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, created_at, host, os, item_count, source
+             FROM snapshots ORDER BY id DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(SnapshotMeta {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                created_at: r.get(2)?,
+                host: r.get(3)?,
+                os: r.get(4)?,
+                item_count: r.get(5)?,
+                source: r.get(6)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_snapshot(&self, id: i64) -> Result<Option<(SnapshotMeta, Vec<Item>)>> {
+        let row = self.conn.query_row(
+            "SELECT id, name, created_at, host, os, item_count, source, data_json
+             FROM snapshots WHERE id = ?1",
+            params![id],
+            |r| {
+                let meta = SnapshotMeta {
+                    id: r.get(0)?,
+                    name: r.get(1)?,
+                    created_at: r.get(2)?,
+                    host: r.get(3)?,
+                    os: r.get(4)?,
+                    item_count: r.get(5)?,
+                    source: r.get(6)?,
+                };
+                let data: String = r.get(7)?;
+                Ok((meta, data))
+            },
+        );
+        match row {
+            Ok((meta, data)) => {
+                let items: Vec<Item> = serde_json::from_str(&data).unwrap_or_default();
+                Ok(Some((meta, items)))
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn delete_snapshot(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM snapshots WHERE id = ?1", params![id])?;
         Ok(())
     }
 
