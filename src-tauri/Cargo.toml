@@ -1,6 +1,6 @@
 [package]
 name = "agent-ledger"
-version = "0.8.1"
+version = "0.9.0"
 description = "IO Inventory — developer & AI environment inventory"
 authors = ["elm1nst3r"]
 edition = "2021"
