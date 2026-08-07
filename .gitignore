@@ -16,6 +16,9 @@ dist-release
 # Local Claude Code guidance — not for the public repo
 CLAUDE.md
 
+# Updater signing key — MUST stay secret; back this up somewhere safe
+.secrets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1202,6 +1202,52 @@ body,
   cursor: pointer;
 }
 
+.more-version {
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 6px 10px 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
+/* ---- Update banner ---- */
+.banner.update {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, var(--bg-1)), var(--bg-1));
+  color: var(--text);
+  border-bottom: 1px solid var(--accent);
+  font-size: 13px;
+}
+.banner-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(180deg, #4aa9ff, #2f8fef);
+  border: 1px solid #2b83e6;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 4px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.banner-cta:hover {
+  filter: brightness(1.08);
+}
+.banner.update .banner-exit {
+  margin-left: 0;
+}
+.update-progress {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+.banner.info .banner-exit {
+  margin-left: auto;
+}
+
 /* ---- Snapshot banner ---- */
 .banner.snapshot {
   display: flex;

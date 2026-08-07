@@ -1,6 +1,12 @@
 import { create } from "zustand";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { api } from "./lib/api";
 import type { Enrichment, Graph, Inventory, Item, SnapshotMeta } from "./lib/types";
+
+// The Update object carries methods and isn't serializable — keep it here,
+// out of the reactive store, and expose only plain metadata to the UI.
+let pendingUpdate: Update | null = null;
 
 type Tab = "graph" | "list" | "cleanup" | "history";
 type Theme = "dark" | "light";
@@ -35,6 +41,11 @@ interface State {
   viewingSnapshot: SnapshotMeta | null;
   liveInventory: Inventory | null;
   liveGraph: Graph | null;
+  // Updater
+  updateAvailable: { version: string; notes: string } | null;
+  updateStatus: "idle" | "checking" | "downloading" | "error";
+  updateProgress: number; // 0..1
+  updateError: string | null;
 
   init: () => Promise<void>;
   scan: () => Promise<void>;
@@ -52,6 +63,9 @@ interface State {
   refreshSnapshots: () => Promise<void>;
   viewSnapshot: (meta: SnapshotMeta) => Promise<void>;
   exitSnapshot: () => void;
+  checkForUpdates: (silent: boolean) => Promise<void>;
+  installUpdate: () => Promise<void>;
+  dismissUpdate: () => void;
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -73,6 +87,10 @@ export const useStore = create<State>((set, get) => ({
   viewingSnapshot: null,
   liveInventory: null,
   liveGraph: null,
+  updateAvailable: null,
+  updateStatus: "idle",
+  updateProgress: 0,
+  updateError: null,
 
   init: async () => {
     applyTheme(get().theme);
@@ -94,6 +112,8 @@ export const useStore = create<State>((set, get) => ({
     } catch (e) {
       set({ error: String(e), loading: false });
     }
+    // Silent update check on launch (shows a banner only if one is available).
+    get().checkForUpdates(true);
   },
 
   scan: async () => {
@@ -193,6 +213,49 @@ export const useStore = create<State>((set, get) => ({
       selectedKey: null,
     });
   },
+
+  checkForUpdates: async (silent) => {
+    set({ updateStatus: "checking", updateError: null });
+    try {
+      const u = await check();
+      if (u) {
+        pendingUpdate = u;
+        set({
+          updateAvailable: { version: u.version, notes: u.body ?? "" },
+          updateStatus: "idle",
+        });
+      } else {
+        pendingUpdate = null;
+        set({ updateAvailable: null, updateStatus: "idle" });
+        if (!silent) set({ updateError: "You're on the latest version." });
+      }
+    } catch (e) {
+      // Auto-checks fail quietly (e.g. no manifest yet / offline).
+      set({ updateStatus: "idle" });
+      if (!silent) set({ updateError: `Update check failed: ${e}` });
+    }
+  },
+
+  installUpdate: async () => {
+    if (!pendingUpdate) return;
+    set({ updateStatus: "downloading", updateProgress: 0, updateError: null });
+    try {
+      let total = 0;
+      let got = 0;
+      await pendingUpdate.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data.contentLength ?? 0;
+        else if (ev.event === "Progress") {
+          got += ev.data.chunkLength;
+          set({ updateProgress: total ? got / total : 0 });
+        }
+      });
+      await relaunch();
+    } catch (e) {
+      set({ updateStatus: "error", updateError: `Update failed: ${e}` });
+    }
+  },
+
+  dismissUpdate: () => set({ updateAvailable: null, updateError: null }),
 
   enrich: async (item) => {
     if (get().viewingSnapshot) return; // read-only while viewing a snapshot

@@ -12,7 +12,10 @@ import {
   ChevronDown,
   Eye,
   X,
+  MoreVertical,
+  DownloadCloud,
 } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useStore } from "./store";
 import { api } from "./lib/api";
 import GraphView from "./graph/GraphView";
@@ -39,23 +42,35 @@ export default function App() {
     setSearch,
     toggleTheme,
     exitSnapshot,
+    updateAvailable,
+    updateStatus,
+    updateProgress,
+    updateError,
+    checkForUpdates,
+    installUpdate,
+    dismissUpdate,
   } = useStore();
   const [msg, setMsg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     init();
+    getVersion().then(setAppVersion).catch(() => {});
   }, [init]);
 
   useEffect(() => {
-    if (!exportOpen) return;
+    if (!exportOpen && !moreOpen) return;
     const onDown = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false);
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [exportOpen]);
+  }, [exportOpen, moreOpen]);
 
   function flash(text: string) {
     setMsg(text);
@@ -160,9 +175,59 @@ export default function App() {
             <RefreshCw size={15} className={scanning ? "spin" : ""} />
             {scanning ? "Scanning…" : "Scan"}
           </button>
+
+          <div className="ms" ref={moreRef}>
+            <button className="btn btn-ghost icon-btn" onClick={() => setMoreOpen((o) => !o)}>
+              <MoreVertical size={16} />
+            </button>
+            {moreOpen && (
+              <div className="ms-panel export-menu">
+                <button
+                  className="ms-row"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    checkForUpdates(false);
+                  }}
+                >
+                  {updateStatus === "checking" ? "Checking…" : "Check for updates"}
+                </button>
+                {appVersion && <div className="more-version">v{appVersion}</div>}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
+      {updateAvailable && (
+        <div className="banner update">
+          <DownloadCloud size={15} />
+          <span>
+            Version <strong>{updateAvailable.version}</strong> is available.
+          </span>
+          {updateStatus === "downloading" ? (
+            <span className="update-progress">
+              Downloading… {Math.round(updateProgress * 100)}%
+            </span>
+          ) : (
+            <>
+              <button className="banner-cta" onClick={installUpdate}>
+                Download &amp; install
+              </button>
+              <button className="banner-exit" onClick={dismissUpdate}>
+                Later
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {updateError && !updateAvailable && (
+        <div className="banner info">
+          {updateError}
+          <button className="banner-exit" onClick={dismissUpdate}>
+            <X size={13} /> Dismiss
+          </button>
+        </div>
+      )}
       {error && <div className="banner error">{error}</div>}
       {msg && <div className="banner info">{msg}</div>}
       {viewingSnapshot && (
