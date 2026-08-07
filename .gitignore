@@ -19,6 +19,9 @@ CLAUDE.md
 # Updater signing key — MUST stay secret; back this up somewhere safe
 .secrets/
 
+# Staged MCP sidecar binary (rebuilt by scripts/build-mcp.mjs on every build)
+src-tauri/binaries/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -132,6 +132,33 @@ export interface Enrichment {
   installed_at?: string | null;
 }
 
+/** One toggleable part of the machine to scan. */
+export interface ScanSource {
+  id: string;
+  label: string;
+  description: string;
+  domain: Domain;
+}
+
+export interface Settings {
+  /** Source ids switched off. Empty = scan everything. */
+  disabled_sources: string[];
+  /** Empty = use the auto-detected workspace roots. */
+  roots: string[];
+  /** Whether the MCP server exposes install/update/uninstall and cleanups. */
+  mcp_allow_write: boolean;
+}
+
+export interface McpInfo {
+  binary_path?: string | null;
+  available: boolean;
+  db_path: string;
+  config_json: string;
+  cli_command: string;
+  server_name: string;
+  version: string;
+}
+
 export const DOMAIN_LABELS: Record<Domain, string> = {
   package_manager: "Package Managers",
   runtime: "Runtimes",

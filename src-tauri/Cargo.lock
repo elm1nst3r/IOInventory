@@ -10,7 +10,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "agent-ledger"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1834,6 +1834,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
 dependencies = [
  "cfb",
+]
+
+[[package]]
+name = "ioinv-mcp"
+version = "0.10.0"
+dependencies = [
+ "agent-ledger",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -1,52 +1,34 @@
 use crate::db::Db;
 use crate::model::{CleanupAction, CleanupPreview, CleanupResult, Graph, Inventory};
+use crate::settings::{ScanSourceInfo, Settings};
 use crate::{cleanup, export, graph, scan};
-use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::State;
 
-/// Shared application state: the SQLite handle and the configured workspace roots.
+/// Shared application state: the SQLite handle and the user's settings (which
+/// carry the workspace roots and the enabled scan sources).
 pub struct AppState {
     pub db: Mutex<Db>,
-    pub roots: Mutex<Vec<PathBuf>>,
+    pub settings: Mutex<Settings>,
 }
 
-fn host_name() -> String {
-    hostname::get()
-        .ok()
-        .and_then(|h| h.into_string().ok())
-        .unwrap_or_else(|| "this-machine".into())
-}
-
-fn os_string() -> String {
-    #[cfg(target_os = "macos")]
-    {
-        "macOS".to_string()
-    }
-    #[cfg(target_os = "windows")]
-    {
-        "Windows".to_string()
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    {
-        std::env::consts::OS.to_string()
-    }
-}
+use crate::scan::util::{host_name, os_name};
 
 /// Run a full on-demand scan, persist it, and return the fresh inventory.
 #[tauri::command]
 pub async fn scan(state: State<'_, AppState>) -> Result<Inventory, String> {
-    let roots = { state.roots.lock().unwrap().clone() };
+    // Clone out of the guard before awaiting — never hold a std Mutex across .await.
+    let settings = { state.settings.lock().unwrap().clone() };
     let started_at = chrono::Utc::now().to_rfc3339();
     let timer = Instant::now();
 
-    let items = scan::run_all(roots).await;
+    let items = scan::run_all(settings.roots(), &settings).await;
 
     let finished_at = chrono::Utc::now().to_rfc3339();
     let duration_ms = timer.elapsed().as_millis() as i64;
     let host = host_name();
-    let os = os_string();
+    let os = os_name();
 
     let inventory = {
         let mut db = state.db.lock().unwrap();
@@ -138,22 +120,68 @@ pub async fn run_cleanup(id: String) -> CleanupResult {
     cleanup::run(&id).await
 }
 
-/// Workspace roots currently searched for git repos.
+/// Workspace roots currently searched for git repos (resolved: an empty
+/// setting means the auto-detected defaults, and that's what's returned).
 #[tauri::command]
 pub fn get_roots(state: State<'_, AppState>) -> Vec<String> {
     state
-        .roots
+        .settings
         .lock()
         .unwrap()
+        .roots()
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect()
 }
 
 #[tauri::command]
-pub fn set_roots(state: State<'_, AppState>, roots: Vec<String>) {
-    let mut guard = state.roots.lock().unwrap();
-    *guard = roots.into_iter().map(PathBuf::from).collect();
+pub fn set_roots(state: State<'_, AppState>, roots: Vec<String>) -> Result<(), String> {
+    // Drop the settings guard before taking the db lock — `set_settings` takes
+    // them the other way round, and holding both would invert the lock order.
+    let next = {
+        let mut guard = state.settings.lock().unwrap();
+        guard.roots = roots;
+        guard.clone()
+    };
+    state
+        .db
+        .lock()
+        .unwrap()
+        .save_settings(&next)
+        .map_err(|e| e.to_string())
+}
+
+// ---- Settings ----
+
+/// The parts of the machine that can be scanned, for the settings UI.
+#[tauri::command]
+pub fn list_scan_sources() -> Vec<ScanSourceInfo> {
+    crate::settings::catalog()
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<'_, AppState>) -> Settings {
+    state.settings.lock().unwrap().clone()
+}
+
+/// Persist settings and return them as stored (unknown source ids dropped).
+#[tauri::command]
+pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Result<Settings, String> {
+    let clean = settings.sanitized();
+    state
+        .db
+        .lock()
+        .unwrap()
+        .save_settings(&clean)
+        .map_err(|e| e.to_string())?;
+    *state.settings.lock().unwrap() = clean.clone();
+    Ok(clean)
+}
+
+/// Where the bundled MCP server binary lives and how to point an agent at it.
+#[tauri::command]
+pub fn mcp_info() -> crate::mcp::McpInfo {
+    crate::mcp::info()
 }
 
 // ---- Snapshots ----

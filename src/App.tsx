@@ -12,10 +12,9 @@ import {
   ChevronDown,
   Eye,
   X,
-  MoreVertical,
+  Settings as SettingsIcon,
   DownloadCloud,
 } from "lucide-react";
-import { getVersion } from "@tauri-apps/api/app";
 import { useStore } from "./store";
 import { api } from "./lib/api";
 import GraphView from "./graph/GraphView";
@@ -24,10 +23,12 @@ import DetailPanel from "./panels/DetailPanel";
 import CleanupPanel from "./panels/CleanupPanel";
 import FilterBar from "./panels/FilterBar";
 import SnapshotsPanel from "./panels/SnapshotsPanel";
+import SettingsPanel from "./panels/SettingsPanel";
 import "./App.css";
 
 export default function App() {
   const {
+    accentId,
     inventory,
     scanning,
     loading,
@@ -45,32 +46,25 @@ export default function App() {
     updateAvailable,
     updateStatus,
     updateProgress,
-    updateError,
-    checkForUpdates,
     installUpdate,
     dismissUpdate,
   } = useStore();
   const [msg, setMsg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [appVersion, setAppVersion] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
-  const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     init();
-    getVersion().then(setAppVersion).catch(() => {});
   }, [init]);
 
   useEffect(() => {
-    if (!exportOpen && !moreOpen) return;
+    if (!exportOpen) return;
     const onDown = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false);
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [exportOpen, moreOpen]);
+  }, [exportOpen]);
 
   function flash(text: string) {
     setMsg(text);
@@ -102,7 +96,11 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <img src="/logo.png" className="brand-logo" alt="IO Inventory" />
+          <img
+            src={accentId === "matrix" && theme === "dark" ? "/logo-matrix.png" : "/logo.png"}
+            className="brand-logo"
+            alt="IO Inventory"
+          />
           <span>IO Inventory</span>
         </div>
 
@@ -176,25 +174,13 @@ export default function App() {
             {scanning ? "Scanning…" : "Scan"}
           </button>
 
-          <div className="ms" ref={moreRef}>
-            <button className="btn btn-ghost icon-btn" onClick={() => setMoreOpen((o) => !o)}>
-              <MoreVertical size={16} />
-            </button>
-            {moreOpen && (
-              <div className="ms-panel export-menu">
-                <button
-                  className="ms-row"
-                  onClick={() => {
-                    setMoreOpen(false);
-                    checkForUpdates(false);
-                  }}
-                >
-                  {updateStatus === "checking" ? "Checking…" : "Check for updates"}
-                </button>
-                {appVersion && <div className="more-version">v{appVersion}</div>}
-              </div>
-            )}
-          </div>
+          <button
+            className={`btn btn-ghost icon-btn ${tab === "settings" ? "active" : ""}`}
+            onClick={() => setTab("settings")}
+            title="Settings"
+          >
+            <SettingsIcon size={16} />
+          </button>
         </div>
       </header>
 
@@ -220,14 +206,6 @@ export default function App() {
           )}
         </div>
       )}
-      {updateError && !updateAvailable && (
-        <div className="banner info">
-          {updateError}
-          <button className="banner-exit" onClick={dismissUpdate}>
-            <X size={13} /> Dismiss
-          </button>
-        </div>
-      )}
       {error && <div className="banner error">{error}</div>}
       {msg && <div className="banner info">{msg}</div>}
       {viewingSnapshot && (
@@ -243,6 +221,8 @@ export default function App() {
       <main className="main">
         {loading ? (
           <div className="empty-hint">Loading…</div>
+        ) : tab === "settings" ? (
+          <SettingsPanel />
         ) : tab === "history" ? (
           <SnapshotsPanel />
         ) : tab === "cleanup" ? (

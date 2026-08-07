@@ -1,12 +1,17 @@
 mod cleanup;
 mod commands;
-mod db;
 mod export;
 mod graph;
 mod manage;
 mod model;
-mod scan;
+mod settings;
 mod snapshot;
+
+// Public so the `ioinv-mcp` binary can share the ledger, the scan engine, and
+// the MCP server itself with the desktop app.
+pub mod db;
+pub mod mcp;
+pub mod scan;
 
 use commands::AppState;
 use std::sync::Mutex;
@@ -34,10 +39,11 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir).ok();
             let db_path = data_dir.join("ledger.sqlite");
             let db = db::Db::open(&db_path).expect("failed to open ledger database");
+            let settings = db.settings().sanitized();
 
             app.manage(AppState {
                 db: Mutex::new(db),
-                roots: Mutex::new(scan::default_roots()),
+                settings: Mutex::new(settings),
             });
             Ok(())
         })
@@ -55,6 +61,10 @@ pub fn run() {
             commands::run_cleanup,
             commands::get_roots,
             commands::set_roots,
+            commands::list_scan_sources,
+            commands::get_settings,
+            commands::set_settings,
+            commands::mcp_info,
             commands::export_agent_map,
             commands::save_snapshot,
             commands::list_snapshots,

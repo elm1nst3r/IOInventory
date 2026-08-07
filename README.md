@@ -88,6 +88,12 @@ bulk-install everything you're missing.
   **dry-run preview and confirm** — nothing destructive runs blind.
 - 📄 **Export** — a human-readable **`AGENT_MAP.md`** ledger (with a Tagged Views section) or a
   machine-readable **`.ioinv.json`** snapshot you can re-import elsewhere.
+- 🔌 **Built-in MCP server** — point Claude Code (or any MCP client) at the bundled `ioinv-mcp`
+  and your agent can search packages, repos and models, read notes and tags, diff snapshots, and
+  pull the whole `AGENT_MAP.md`. **Read-only by default**; the app doesn't need to be running.
+- ⚙️ **Settings** — pick exactly which sources to scan (switch off Docker or gems and the
+  collector is skipped entirely, so scans get faster), set your workspace roots, wire up MCP,
+  and manage updates.
 - 🔄 **In-app auto-update** — checks GitHub on launch, then downloads, **cryptographically verifies**,
   installs, and relaunches new versions in place.
 - 🌗 **Light & dark** blueprint-blue theme.
@@ -124,6 +130,35 @@ npm run tauri build    # → .app / .dmg (macOS) or .msi / .exe (Windows)
 
 Installed builds (v0.9.1+) **update themselves** — the app checks GitHub on launch and offers a
 one-click, signature-verified install of any newer release.
+
+### 🔌 Connect an AI agent (MCP)
+
+The packaged app ships an MCP server at
+`/Applications/IO Inventory.app/Contents/MacOS/ioinv-mcp`. **Settings → MCP server** shows the
+exact path plus a copy-paste config; or wire it up directly:
+
+```bash
+claude mcp add io-inventory -- "/Applications/IO Inventory.app/Contents/MacOS/ioinv-mcp"
+```
+
+For any other client, the equivalent config is:
+
+```json
+{
+  "mcpServers": {
+    "io-inventory": { "command": "/Applications/IO Inventory.app/Contents/MacOS/ioinv-mcp" }
+  }
+}
+```
+
+It reads the same SQLite ledger as the app, so the app doesn't need to be running. Agents get
+16 read-only tools — `inventory_summary`, `search_items`, `get_item`, `list_collectors`,
+`export_agent_map`, `diff_snapshot`, `set_note`/`set_tags`, and more. Installing, updating,
+uninstalling and cleanups are **not exposed** unless you add `--allow-write` to the args
+yourself; without it the agent can still show you the exact command to run.
+
+Building from source? `npm run mcp:build` produces `src-tauri/target/debug/ioinv-mcp`, and
+`ioinv-mcp --print-config` prints a config snippet with the right path filled in.
 
 ## 🏗️ How it works
 

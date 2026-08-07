@@ -30,13 +30,26 @@ export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY")"
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 
 echo "==> Building signed app bundle v$VERSION"
-npm run tauri build -- --bundles app
+# --config layers in the ioinv-mcp sidecar (staged by beforeBuildCommand) so the
+# MCP server ships inside Contents/MacOS and reaches users via auto-update.
+npm run tauri build -- --bundles app --config src-tauri/tauri.mcp.conf.json
 
 BUNDLE="src-tauri/target/release/bundle/macos"
 APP="$BUNDLE/IO Inventory.app"
 TARGZ="$BUNDLE/IO Inventory.app.tar.gz"
 SIG="$BUNDLE/IO Inventory.app.tar.gz.sig"
 [ -d "$APP" ] && [ -f "$TARGZ" ] && [ -f "$SIG" ] || { echo "missing build artifacts"; exit 1; }
+[ -x "$APP/Contents/MacOS/ioinv-mcp" ] || { echo "MCP sidecar missing from the bundle"; exit 1; }
+# Guard against Tauri bundling the MCP server as the app (it does that if the
+# server ever becomes a second [[bin]] of the app crate) — the build still
+# "succeeds" and the resulting .app launches nothing. Matched on a string only
+# the MCP entry point contains; don't exec the app binary here, it's a GUI and
+# would hang the release.
+[ -x "$APP/Contents/MacOS/agent-ledger" ] || { echo "main app binary missing from the bundle"; exit 1; }
+grep -aq 'ioinv-mcp \[OPTIONS\]' "$APP/Contents/MacOS/agent-ledger" \
+  && { echo "BUG: the bundled app binary is the MCP server, not the app"; exit 1; }
+grep -aq 'ioinv-mcp \[OPTIONS\]' "$APP/Contents/MacOS/ioinv-mcp" \
+  || { echo "BUG: the bundled sidecar is not the MCP server"; exit 1; }
 
 OUT="dist-release"; mkdir -p "$OUT"
 DMG="$OUT/IO_Inventory_${VERSION}_aarch64.dmg"

@@ -10,6 +10,9 @@ import type {
   Graph,
   Inventory,
   Item,
+  McpInfo,
+  ScanSource,
+  Settings,
   SnapshotMeta,
 } from "./types";
 
@@ -37,6 +40,12 @@ export const api = {
   getRoots: () => invoke<string[]>("get_roots"),
   setRoots: (roots: string[]) => invoke<void>("set_roots", { roots }),
   exportAgentMap: () => invoke<{ path: string; content: string }>("export_agent_map"),
+
+  // Settings
+  listScanSources: () => invoke<ScanSource[]>("list_scan_sources"),
+  getSettings: () => invoke<Settings>("get_settings"),
+  setSettings: (settings: Settings) => invoke<Settings>("set_settings", { settings }),
+  mcpInfo: () => invoke<McpInfo>("mcp_info"),
 
   // Snapshots
   saveSnapshot: (name: string) => invoke<SnapshotMeta>("save_snapshot", { name }),

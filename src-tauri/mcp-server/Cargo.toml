@@ -1,0 +1,16 @@
+[package]
+name = "ioinv-mcp"
+version = "0.10.0"
+description = "IO Inventory MCP server — exposes the machine inventory to AI agents over stdio"
+edition = "2021"
+
+[[bin]]
+name = "ioinv-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# The server itself lives in the app crate (agent_ledger_lib::mcp) so it shares
+# the scan engine and the ledger; this crate is just the entry point.
+agent-ledger = { path = ".." }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }

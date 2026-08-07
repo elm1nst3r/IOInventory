@@ -22,6 +22,7 @@ import {
   Package,
 } from "lucide-react";
 import { useStore } from "../store";
+import { accentById } from "../lib/appearance";
 import { formatBytes } from "../lib/api";
 import { passesFilters, itemInView } from "../lib/filters";
 import type { Graph as GraphData, GraphNode } from "../lib/types";
@@ -155,6 +156,11 @@ export default function GraphView() {
   const select = useStore((s) => s.select);
   const selectedKey = useStore((s) => s.selectedKey);
   const theme = useStore((s) => s.theme);
+  const accentId = useStore((s) => s.accentId);
+  // React Flow paints the minimap and dot grid to a canvas, so these can't be
+  // themed from CSS — they have to be read from the accent directly.
+  const accent = accentById(accentId);
+  const matrix = accentId === "matrix" && theme === "dark";
   const layout = useStore((s) => s.layout);
   const setLayout = useStore((s) => s.setLayout);
   const filters = useStore((s) => s.filters);
@@ -334,17 +340,26 @@ export default function GraphView() {
         nodesConnectable={false}
         nodesDraggable={false}
       >
-        <Background color={theme === "light" ? "#d8dce4" : "#2a2f3a"} gap={22} />
+        <Background
+          color={matrix ? "#12401a" : theme === "light" ? "#d8dce4" : "#2a2f3a"}
+          gap={22}
+        />
         <Controls showInteractive={false} />
         <MiniMap
           pannable
           zoomable
-          bgColor={theme === "light" ? "#eef1f6" : "#12151d"}
+          bgColor={matrix ? "#040a04" : theme === "light" ? "#eef1f6" : "#12151d"}
           nodeColor={(n) => {
             const k = (n.data?.node as GraphNode)?.kind;
-            return k === "domain" ? "#2f8fef" : k === "collector" ? "#5bb0ff" : "#8a93a6";
+            return k === "domain" ? accent.color : k === "collector" ? accent.light : accent.edge;
           }}
-          maskColor={theme === "light" ? "rgba(230,233,240,0.6)" : "rgba(6,8,12,0.6)"}
+          maskColor={
+            matrix
+              ? "rgba(0,0,0,0.65)"
+              : theme === "light"
+                ? "rgba(230,233,240,0.6)"
+                : "rgba(6,8,12,0.6)"
+          }
         />
       </ReactFlow>
     </div>

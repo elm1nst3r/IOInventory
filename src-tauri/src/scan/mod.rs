@@ -16,6 +16,8 @@ pub mod runtimes;
 pub mod util;
 
 use crate::model::Item;
+use crate::settings::Settings;
+use std::future::Future;
 use std::path::PathBuf;
 
 /// Default workspace roots to search for git repositories.
@@ -28,24 +30,37 @@ pub fn default_roots() -> Vec<PathBuf> {
         .collect()
 }
 
-/// Run every collector concurrently and return the merged item list. Each
-/// collector internally guards its own subprocesses with a timeout, so a hung
-/// tool can't stall the overall scan.
-pub async fn run_all(roots: Vec<PathBuf>) -> Vec<Item> {
+/// Await `f` only when the source is enabled. Async fns are lazy, so a
+/// disabled collector's future is constructed but never polled — no process is
+/// spawned and no filesystem is walked.
+async fn when<F: Future<Output = Vec<Item>>>(enabled: bool, f: F) -> Vec<Item> {
+    if enabled {
+        f.await
+    } else {
+        Vec::new()
+    }
+}
+
+/// Run every enabled collector concurrently and return the merged item list.
+/// Each collector internally guards its own subprocesses with a timeout, so a
+/// hung tool can't stall the overall scan.
+pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> Vec<Item> {
+    let on = |id: &str| settings.is_enabled(id);
+
     let (brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_) = tokio::join!(
-        homebrew::collect(),
-        npm::collect(),
-        pip::collect(),
-        cargo::collect(),
-        gem::collect(),
-        runtimes::collect(),
-        docker::collect(),
-        claude::collect(),
-        ollama::collect(),
-        hf_cache::collect(),
-        ai_libs::collect(),
-        ai_tools::collect(),
-        repos::collect(&roots),
+        when(on("homebrew"), homebrew::collect()),
+        when(on("npm"), npm::collect()),
+        when(on("pip"), pip::collect()),
+        when(on("cargo"), cargo::collect()),
+        when(on("gem"), gem::collect()),
+        when(on("runtimes"), runtimes::collect()),
+        when(on("docker"), docker::collect()),
+        when(on("claude"), claude::collect()),
+        when(on("ollama"), ollama::collect()),
+        when(on("hf_cache"), hf_cache::collect()),
+        when(on("ai_libs"), ai_libs::collect()),
+        when(on("ai_tools"), ai_tools::collect()),
+        when(on("repos"), repos::collect(&roots)),
     );
 
     let mut items = Vec::new();
@@ -56,7 +71,13 @@ pub async fn run_all(roots: Vec<PathBuf>) -> Vec<Item> {
     }
 
     // Annotate items that have newer versions available (bulk brew/npm checks).
-    outdated::mark(&mut items).await;
+    // Both queries are slow, so skip them when nothing they'd annotate is here.
+    if items
+        .iter()
+        .any(|i| matches!(i.collector.as_str(), "homebrew" | "homebrew-cask" | "npm"))
+    {
+        outdated::mark(&mut items).await;
+    }
 
     items
 }
@@ -67,12 +88,51 @@ mod tests {
     use std::collections::BTreeMap;
     use std::time::Instant;
 
+    /// Disabling a source must skip its collector outright, not filter after
+    /// the fact — with everything off nothing runs, so this returns instantly.
+    #[tokio::test]
+    async fn disabled_sources_are_not_collected() {
+        let all_off = Settings {
+            disabled_sources: crate::settings::SOURCES.iter().map(|s| s.id.into()).collect(),
+            ..Default::default()
+        };
+        let t = Instant::now();
+        let items = run_all(default_roots(), &all_off).await;
+        let elapsed = t.elapsed();
+        assert!(items.is_empty(), "expected no items, got {}", items.len());
+        assert!(
+            elapsed < std::time::Duration::from_millis(500),
+            "disabled collectors still did work: {elapsed:?}"
+        );
+
+        // With only Homebrew on, nothing else may appear.
+        let only_brew = Settings {
+            disabled_sources: crate::settings::SOURCES
+                .iter()
+                .map(|s| s.id.to_string())
+                .filter(|id| id != "homebrew")
+                .collect(),
+            ..Default::default()
+        };
+        let items = run_all(vec![], &only_brew).await;
+        let foreign: Vec<&str> = items
+            .iter()
+            .map(|i| i.collector.as_str())
+            .filter(|c| !matches!(*c, "homebrew" | "homebrew-cask"))
+            .collect();
+        assert!(foreign.is_empty(), "unexpected collectors leaked through: {foreign:?}");
+        println!(
+            "disabled_sources_are_not_collected OK — all-off in {elapsed:?}, brew-only gave {} items",
+            items.len()
+        );
+    }
+
     /// Smoke test: runs the whole scan against the real machine and prints a
     /// per-collector breakdown. Run with: `cargo test -- --nocapture`.
     #[tokio::test]
     async fn scan_smoke() {
         let t = Instant::now();
-        let items = run_all(default_roots()).await;
+        let items = run_all(default_roots(), &Settings::default()).await;
         let elapsed = t.elapsed();
 
         let mut by: BTreeMap<String, usize> = BTreeMap::new();

@@ -140,3 +140,27 @@ pub fn dir_size(path: &Path) -> Option<i64> {
 pub fn home() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
 }
+
+/// Machine hostname, or a stable placeholder when it can't be read.
+pub fn host_name() -> String {
+    hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+        .unwrap_or_else(|| "this-machine".into())
+}
+
+/// Human-facing OS name recorded on every scan.
+pub fn os_name() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        "macOS".to_string()
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Windows".to_string()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::env::consts::OS.to_string()
+    }
+}

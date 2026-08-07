@@ -1,25 +1,45 @@
 import { create } from "zustand";
+import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { api } from "./lib/api";
-import type { Enrichment, Graph, Inventory, Item, SnapshotMeta } from "./lib/types";
+import {
+  accentById,
+  applyAppearance,
+  initialAccentId,
+  initialReduceMotion,
+  initialThemeMode,
+  resolveTheme,
+  saveAccentId,
+  saveReduceMotion,
+  saveThemeMode,
+  watchSystemTheme,
+  type Theme,
+  type ThemeMode,
+} from "./lib/appearance";
+import type {
+  Enrichment,
+  Graph,
+  Inventory,
+  Item,
+  ScanSource,
+  Settings,
+  SnapshotMeta,
+} from "./lib/types";
 
 // The Update object carries methods and isn't serializable — keep it here,
 // out of the reactive store, and expose only plain metadata to the UI.
 let pendingUpdate: Update | null = null;
 
-type Tab = "graph" | "list" | "cleanup" | "history";
-type Theme = "dark" | "light";
-type Layout = "radial" | "tree";
+// Read once at module load so the very first render already has the right
+// theme; `init` then applies it to the document.
+const initialMode = initialThemeMode();
+const initialAccent = initialAccentId();
+const initialMotion = initialReduceMotion();
+let systemThemeWatched = false;
 
-function initialTheme(): Theme {
-  const saved = localStorage.getItem("al-theme");
-  if (saved === "light" || saved === "dark") return saved;
-  return "dark";
-}
-function applyTheme(t: Theme) {
-  document.documentElement.dataset.theme = t;
-}
+type Tab = "graph" | "list" | "cleanup" | "history" | "settings";
+type Layout = "radial" | "tree";
 
 interface State {
   inventory: Inventory | null;
@@ -30,7 +50,12 @@ interface State {
   tab: Tab;
   search: string;
   selectedKey: string | null;
+  // Appearance
+  themeMode: ThemeMode;
+  /** The theme actually in effect — `themeMode` resolved against the OS. */
   theme: Theme;
+  accentId: string;
+  reduceMotion: boolean;
   layout: Layout;
   filters: Set<string>;
   activeView: string | null;
@@ -46,6 +71,11 @@ interface State {
   updateStatus: "idle" | "checking" | "downloading" | "error";
   updateProgress: number; // 0..1
   updateError: string | null;
+  // Settings
+  settings: Settings;
+  scanSources: ScanSource[];
+  settingsSaving: boolean;
+  appVersion: string;
 
   init: () => Promise<void>;
   scan: () => Promise<void>;
@@ -54,6 +84,9 @@ interface State {
   select: (key: string | null) => void;
   saveNote: (key: string, note: string, why: string) => Promise<void>;
   toggleTheme: () => void;
+  setThemeMode: (m: ThemeMode) => void;
+  setAccent: (id: string) => void;
+  setReduceMotion: (on: boolean) => void;
   setLayout: (l: Layout) => void;
   toggleFilter: (key: string) => void;
   clearFilters: () => void;
@@ -66,6 +99,12 @@ interface State {
   checkForUpdates: (silent: boolean) => Promise<void>;
   installUpdate: () => Promise<void>;
   dismissUpdate: () => void;
+  toggleSource: (id: string) => Promise<void>;
+  setAllSources: (enabled: boolean) => Promise<void>;
+  setRoots: (roots: string[]) => Promise<void>;
+  setMcpAllowWrite: (allow: boolean) => Promise<void>;
+  /** Shared write-through used by the three setters above. */
+  persistSettings: (next: Settings) => Promise<void>;
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -77,7 +116,10 @@ export const useStore = create<State>((set, get) => ({
   tab: "graph",
   search: "",
   selectedKey: null,
-  theme: initialTheme(),
+  themeMode: initialMode,
+  theme: resolveTheme(initialMode),
+  accentId: initialAccent,
+  reduceMotion: initialMotion,
   layout: "radial",
   filters: new Set<string>(),
   activeView: null,
@@ -91,15 +133,36 @@ export const useStore = create<State>((set, get) => ({
   updateStatus: "idle",
   updateProgress: 0,
   updateError: null,
+  settings: { disabled_sources: [], roots: [], mcp_allow_write: false },
+  scanSources: [],
+  settingsSaving: false,
+  appVersion: "",
 
   init: async () => {
-    applyTheme(get().theme);
+    const { themeMode, accentId, reduceMotion } = get();
+    applyAppearance(resolveTheme(themeMode), accentById(accentId), reduceMotion);
+    // Follow the OS while in "system" mode, including live changes. Registered
+    // once for the app's lifetime — StrictMode runs this effect twice in dev,
+    // and the listener is never torn down.
+    if (!systemThemeWatched) {
+      systemThemeWatched = true;
+      watchSystemTheme((sysTheme) => {
+        if (get().themeMode !== "system") return;
+        set({ theme: sysTheme });
+        applyAppearance(sysTheme, accentById(get().accentId), get().reduceMotion);
+      });
+    }
     set({ loading: true });
+    getVersion()
+      .then((appVersion) => set({ appVersion }))
+      .catch(() => {});
     try {
-      const [inventory, graph, snapshots] = await Promise.all([
+      const [inventory, graph, snapshots, settings, scanSources] = await Promise.all([
         api.getInventory(),
         api.getGraph(),
         api.listSnapshots(),
+        api.getSettings(),
+        api.listScanSources(),
       ]);
       set({
         inventory,
@@ -107,6 +170,8 @@ export const useStore = create<State>((set, get) => ({
         liveInventory: inventory,
         liveGraph: graph,
         snapshots,
+        settings,
+        scanSources,
         loading: false,
       });
     } catch (e) {
@@ -139,11 +204,36 @@ export const useStore = create<State>((set, get) => ({
   setSearch: (search) => set({ search }),
   select: (selectedKey) => set({ selectedKey }),
 
+  // The top-bar button flips to the opposite of what's showing, which also
+  // means leaving "system" mode — an explicit click is an explicit choice.
   toggleTheme: () => {
-    const theme: Theme = get().theme === "dark" ? "light" : "dark";
-    localStorage.setItem("al-theme", theme);
-    applyTheme(theme);
-    set({ theme });
+    get().setThemeMode(get().theme === "dark" ? "light" : "dark");
+  },
+
+  setThemeMode: (themeMode) => {
+    const theme = resolveTheme(themeMode);
+    saveThemeMode(themeMode);
+    applyAppearance(theme, accentById(get().accentId), get().reduceMotion);
+    set({ themeMode, theme });
+  },
+
+  setAccent: (accentId) => {
+    const accent = accentById(accentId);
+    saveAccentId(accentId);
+    // A preset that repaints every surface only works on its intended ground,
+    // so switch the theme with it rather than silently ignoring the mode.
+    if (accent.forcesDark && get().theme !== "dark") {
+      saveThemeMode("dark");
+      set({ themeMode: "dark", theme: "dark" });
+    }
+    applyAppearance(get().theme, accent, get().reduceMotion);
+    set({ accentId });
+  },
+
+  setReduceMotion: (reduceMotion) => {
+    saveReduceMotion(reduceMotion);
+    applyAppearance(get().theme, accentById(get().accentId), reduceMotion);
+    set({ reduceMotion });
   },
 
   setLayout: (layout) => set({ layout }),
@@ -256,6 +346,41 @@ export const useStore = create<State>((set, get) => ({
   },
 
   dismissUpdate: () => set({ updateAvailable: null, updateError: null }),
+
+  // Settings are written through to SQLite immediately; the backend returns the
+  // stored value (unknown source ids dropped) and that's what we keep.
+  toggleSource: async (id) => {
+    const { settings } = get();
+    const disabled = settings.disabled_sources.includes(id)
+      ? settings.disabled_sources.filter((d) => d !== id)
+      : [...settings.disabled_sources, id];
+    await get().persistSettings({ ...settings, disabled_sources: disabled });
+  },
+
+  setAllSources: async (enabled) => {
+    const { settings, scanSources } = get();
+    await get().persistSettings({
+      ...settings,
+      disabled_sources: enabled ? [] : scanSources.map((s) => s.id),
+    });
+  },
+
+  setRoots: async (roots) => {
+    await get().persistSettings({ ...get().settings, roots });
+  },
+
+  setMcpAllowWrite: async (mcp_allow_write) => {
+    await get().persistSettings({ ...get().settings, mcp_allow_write });
+  },
+
+  persistSettings: async (next: Settings) => {
+    set({ settingsSaving: true, error: null });
+    try {
+      set({ settings: await api.setSettings(next), settingsSaving: false });
+    } catch (e) {
+      set({ error: String(e), settingsSaving: false });
+    }
+  },
 
   enrich: async (item) => {
     if (get().viewingSnapshot) return; // read-only while viewing a snapshot

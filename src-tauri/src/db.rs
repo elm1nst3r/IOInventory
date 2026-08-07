@@ -1,7 +1,38 @@
 use crate::model::{Domain, Inventory, Item, ScanInfo, SnapshotMeta};
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Bundle identifier — also the app-data folder name, matching what Tauri's
+/// `app_data_dir()` resolves to (`tauri.conf.json` → `identifier`).
+const APP_IDENTIFIER: &str = "com.ioinventory.app";
+
+/// Where the ledger lives for processes that aren't the Tauri app itself
+/// (currently the `ioinv-mcp` server). Mirrors the path the app derives from
+/// Tauri's `app_data_dir()`, with the same `~/.agent-ledger` fallback, so both
+/// processes read and write one database.
+///
+/// `IOINV_DB` overrides it, which is mainly useful for tests.
+pub fn default_path() -> PathBuf {
+    if let Ok(p) = std::env::var("IOINV_DB") {
+        if !p.trim().is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    let fallback = crate::scan::util::home().join(".agent-ledger").join("ledger.sqlite");
+    match dirs::data_dir() {
+        Some(dir) => {
+            let primary = dir.join(APP_IDENTIFIER).join("ledger.sqlite");
+            // Only prefer the legacy location if it's the one that actually has data.
+            if !primary.exists() && fallback.exists() {
+                fallback
+            } else {
+                primary
+            }
+        }
+        None => fallback,
+    }
+}
 
 pub struct Db {
     conn: Connection,
@@ -13,6 +44,11 @@ impl Db {
             std::fs::create_dir_all(parent).ok();
         }
         let conn = Connection::open(path)?;
+        // The desktop app and the MCP server can both hold the ledger open, so
+        // run in WAL mode (readers don't block the writer) and wait instead of
+        // failing outright if the other process is mid-write.
+        let _: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
         let db = Db { conn };
         db.migrate()?;
         Ok(db)
@@ -55,6 +91,10 @@ impl Db {
                 PRIMARY KEY (item_key, tag)
             );
             CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag);
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS snapshots (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 name       TEXT NOT NULL,
@@ -314,6 +354,33 @@ impl Db {
     pub fn delete_snapshot(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM snapshots WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // ---- Settings ----
+
+    /// Read the persisted settings. A missing or unreadable row falls back to
+    /// defaults (scan everything) rather than failing the app's startup.
+    pub fn settings(&self) -> crate::settings::Settings {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![crate::settings::SETTINGS_KEY],
+                |r| r.get(0),
+            )
+            .ok();
+        raw.and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save_settings(&self, s: &crate::settings::Settings) -> Result<()> {
+        let json = serde_json::to_string(s)?;
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = ?2",
+            params![crate::settings::SETTINGS_KEY, json],
+        )?;
         Ok(())
     }
 

@@ -10,6 +10,13 @@
   --text-faint: #6b7488;
   --accent: #2f9bf5;
   --accent-2: #5bb0ff;
+  /* Overridden inline by lib/appearance.ts. --accent-grad is used wherever a
+     surface can take an image; --accent/--accent-2 wherever it can't (text,
+     borders, icons), so gradient presets still render legibly. */
+  --accent-edge: #1f7ad4;
+  --accent-grad: linear-gradient(180deg, #5bb0ff, #2f9bf5);
+  /* Text drawn on top of the accent; pale presets override it. */
+  --on-accent: #ffffff;
   --danger: #ff5c72;
   --ok: #38d39f;
   --btn-hover: #232a3a;
@@ -83,7 +90,8 @@ body,
 .brand-logo {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  /* No border-radius: the artwork already carries its own rounded corners, and
+     clipping again shaves them. */
   display: block;
 }
 .tabs {
@@ -170,14 +178,14 @@ body,
   cursor: default;
 }
 .btn-primary {
-  background: linear-gradient(180deg, #4aa9ff, #2f8fef);
-  border-color: #2b83e6;
-  color: #fff;
+  background: var(--accent-grad);
+  border-color: var(--accent-edge);
+  color: var(--on-accent);
   font-weight: 600;
 }
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
-  background: linear-gradient(180deg, #4aa9ff, #2f8fef);
+  background: var(--accent-grad);
 }
 .btn-ghost {
   background: transparent;
@@ -373,15 +381,23 @@ body,
   text-align: center;
 }
 .gnode-root {
-  background: linear-gradient(180deg, #13233f, #0d1830);
-  border-color: #2b5a8c;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 22%, var(--bg-2)),
+    color-mix(in srgb, var(--accent) 10%, var(--bg))
+  );
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2));
 }
 .gnode-root .gnode-icon {
   color: var(--accent);
 }
 .gnode-domain {
-  background: linear-gradient(180deg, #1a2036, var(--bg-2));
-  border-color: #33406b;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 12%, var(--bg-2)),
+    var(--bg-2)
+  );
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line-2));
 }
 .gnode-domain .gnode-icon {
   color: var(--accent-2);
@@ -1065,12 +1081,20 @@ body,
   background: radial-gradient(circle at 30% 20%, #ffffff, #eef1f6);
 }
 :root[data-theme="light"] .gnode-root {
-  background: linear-gradient(180deg, #e2eeff, #d3e4ff);
-  border-color: #a9c9f2;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 14%, #fff),
+    color-mix(in srgb, var(--accent) 24%, #fff)
+  );
+  border-color: color-mix(in srgb, var(--accent) 38%, #fff);
 }
 :root[data-theme="light"] .gnode-domain {
-  background: linear-gradient(180deg, #e9eefb, #ffffff);
-  border-color: #b9c8ee;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 10%, #fff),
+    #ffffff
+  );
+  border-color: color-mix(in srgb, var(--accent) 26%, #fff);
 }
 :root[data-theme="light"] .gnode-item {
   background: var(--bg-2);
@@ -1224,9 +1248,9 @@ body,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: linear-gradient(180deg, #4aa9ff, #2f8fef);
-  border: 1px solid #2b83e6;
-  color: #fff;
+  background: var(--accent-grad);
+  border: 1px solid var(--accent-edge);
+  color: var(--on-accent);
   font-weight: 600;
   border-radius: 7px;
   padding: 4px 12px;
@@ -1538,4 +1562,437 @@ body,
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
+}
+
+/* ---- Settings ---- */
+.settings-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.settings-nav {
+  width: 200px;
+  flex: none;
+  border-right: 1px solid var(--line);
+  background: var(--bg-1);
+  padding: 24px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav-item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.settings-nav-item:hover {
+  background: var(--bg-2);
+  color: var(--text);
+}
+.settings-nav-item.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.settings {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+:root[data-reduce-motion="true"] .settings {
+  scroll-behavior: auto;
+}
+.settings-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  /* Generous tail so the last section can still scroll to the top, which the
+     scroll spy needs to mark it active. */
+  padding: 24px 28px 60vh;
+}
+.settings .util-group {
+  scroll-margin-top: 24px;
+}
+.settings .util-group-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.set-head-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.set-hint {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.55;
+  margin: 0 0 14px;
+  max-width: 74ch;
+}
+.set-hint code,
+.set-note code {
+  background: var(--bg-3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+}
+.set-group {
+  margin-bottom: 16px;
+}
+.set-group-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.set-sources {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 8px;
+}
+.set-source {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 13px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, opacity 0.12s ease;
+}
+.set-source:hover {
+  border-color: var(--line-2);
+}
+.set-source.off {
+  opacity: 0.5;
+}
+.set-source input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex: none;
+}
+.set-source-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.set-source-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.set-source-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.set-roots {
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.set-roots:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.set-roots-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.set-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+.set-kv > span {
+  color: var(--text-faint);
+  width: 58px;
+  flex: none;
+}
+.set-kv code {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+.set-snippet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 6px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.set-snippet-head .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.set-snippet {
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 13px;
+  margin: 0;
+  /* Long install paths would otherwise need horizontal scrolling on the one
+     line users most need to read — wrap instead. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--accent-2);
+}
+.set-note {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+.set-note .btn {
+  margin-top: 10px;
+}
+.set-notes-body {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+}
+.set-update-msg {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.topbar-right .icon-btn.active {
+  background: var(--bg-3);
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+/* MCP read/write toggle — a single high-consequence switch, so it reads as a
+   status row rather than another checkbox in the grid. */
+.set-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ok);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.set-toggle:hover {
+  border-color: var(--line-2);
+  border-left-color: var(--ok);
+}
+.set-toggle.on {
+  border-left-color: var(--danger);
+}
+.set-toggle.on:hover {
+  border-left-color: var(--danger);
+}
+.set-toggle input {
+  margin: 2px 0 0;
+  accent-color: var(--danger);
+  cursor: pointer;
+  flex: none;
+}
+.set-toggle .set-source-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ok);
+}
+.set-toggle.on .set-source-name {
+  color: var(--danger);
+}
+.set-toggle-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+/* ---- Appearance controls ---- */
+.set-field-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 18px 0 8px;
+}
+.set-field-label:first-of-type {
+  margin-top: 0;
+}
+.set-segmented {
+  display: inline-flex;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 3px;
+  gap: 2px;
+}
+.set-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.set-segmented button:hover {
+  color: var(--text);
+}
+.set-segmented button.active {
+  background: var(--bg-3);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+.set-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.set-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  /* Keeps the tick readable on pale swatches like Amber. */
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.set-swatch:hover {
+  transform: translateY(-2px);
+}
+.set-swatch.active {
+  box-shadow:
+    0 0 0 2px var(--bg-1),
+    0 0 0 4px var(--accent);
+}
+:root[data-reduce-motion="true"] .set-swatch:hover {
+  transform: none;
+}
+/* The reduce-motion switch is a preference, not a warning — drop the red/green
+   framing the MCP write toggle uses. */
+.set-toggle.plain,
+.set-toggle.plain:hover {
+  border-left-color: var(--line);
+  margin-top: 18px;
+}
+.set-toggle.plain input {
+  accent-color: var(--accent);
+}
+.set-toggle.plain .set-source-name,
+.set-toggle.plain.on .set-source-name {
+  color: var(--text);
+}
+
+/* ---- Reduce motion ----
+   Transitions and decorative movement go; the loading spinner stays, because
+   it's the only signal that work is in progress. */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+}
+:root[data-reduce-motion="true"] .gnode:hover,
+:root[data-reduce-motion="true"] .btn:hover:not(:disabled) {
+  transform: none;
+}
+
+/* ---- Keyboard focus ----
+   The OS focus ring sits right where the swatch's selection ring goes, so a
+   focused swatch reads as a selected one. Give keyboard focus its own neutral
+   treatment and keep the accent ring meaning "chosen". :focus-visible only
+   fires for keyboard/AT navigation, so mouse clicks leave nothing behind. */
+.set-swatch:focus,
+.set-segmented button:focus,
+.settings-nav-item:focus {
+  outline: none;
+}
+.set-swatch:focus-visible,
+.set-segmented button:focus-visible,
+.settings-nav-item:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+
+/* ---- Matrix ----
+   The surface colours come from the preset's variable overrides; this is the
+   part variables can't express. Scoped to dark, since the preset degrades to a
+   plain green accent in light mode. */
+:root[data-theme="dark"][data-accent="matrix"] {
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --danger: #ff4d4d;
+}
+/* Phosphor bloom on the things that carry the eye. Kept off body copy, which
+   glows itself into illegibility. */
+:root[data-theme="dark"][data-accent="matrix"] .brand,
+:root[data-theme="dark"][data-accent="matrix"] .cleanup-intro h2,
+:root[data-theme="dark"][data-accent="matrix"] .util-group-head h3,
+:root[data-theme="dark"][data-accent="matrix"] .scan-info,
+:root[data-theme="dark"][data-accent="matrix"] .tabs button.active {
+  text-shadow: 0 0 9px rgba(0, 255, 65, 0.4);
+}
+:root[data-theme="dark"][data-accent="matrix"] .btn-primary {
+  box-shadow: 0 0 14px rgba(0, 255, 65, 0.35);
+}
+/* CRT scanlines. Fixed + pointer-events:none so it overlays without ever
+   intercepting a click. */
+:root[data-theme="dark"][data-accent="matrix"] .app::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 255, 65, 0.05) 0 1px,
+    transparent 1px 3px
+  );
+}
+:root[data-theme="dark"][data-accent="matrix"] .graph-wrap {
+  background: radial-gradient(circle at 30% 20%, #04140a, #000);
+}
+:root[data-theme="dark"][data-accent="matrix"] .set-snippet,
+:root[data-theme="dark"][data-accent="matrix"] .cc-cmd {
+  color: var(--accent);
 }

@@ -1,11 +1,13 @@
 {
   "name": "io-inventory",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "mcp:build": "node scripts/build-mcp.mjs",
+    "mcp:build:release": "node scripts/build-mcp.mjs --release",
     "preview": "vite preview",
     "tauri": "tauri"
   },
