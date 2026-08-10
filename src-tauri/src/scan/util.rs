@@ -1,7 +1,57 @@
+use std::ffi::{OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::process::Command;
+
+#[derive(Clone)]
+struct ScanDiagnostics {
+    source: String,
+    warnings: std::sync::Arc<std::sync::Mutex<Vec<crate::model::ScanWarning>>>,
+}
+
+tokio::task_local! {
+    static SCAN_DIAGNOSTICS: ScanDiagnostics;
+}
+
+/// Run one collector with command failures attributed to that source.
+pub async fn with_scan_diagnostics<F, T>(
+    source: &str,
+    warnings: std::sync::Arc<std::sync::Mutex<Vec<crate::model::ScanWarning>>>,
+    future: F,
+) -> T
+where
+    F: std::future::Future<Output = T>,
+{
+    SCAN_DIAGNOSTICS
+        .scope(
+            ScanDiagnostics {
+                source: source.to_string(),
+                warnings,
+            },
+            future,
+        )
+        .await
+}
+
+fn record_scan_warning(message: String) {
+    let message = message
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(500)
+        .collect();
+    let _ = SCAN_DIAGNOSTICS.try_with(|diagnostics| {
+        if let Ok(mut warnings) = diagnostics.warnings.lock() {
+            warnings.push(crate::model::ScanWarning {
+                source: diagnostics.source.clone(),
+                message,
+            });
+        }
+    });
+}
 
 /// Default per-command timeout so a hung tool can never block a scan.
 pub const CMD_TIMEOUT: Duration = Duration::from_secs(4);
@@ -9,12 +59,14 @@ pub const CMD_TIMEOUT: Duration = Duration::from_secs(4);
 /// A GUI app launched from Finder inherits a minimal PATH that omits
 /// Homebrew, cargo, etc. Build an augmented PATH covering the usual install
 /// locations so `which` and command execution find the real binaries.
-fn augmented_path() -> &'static str {
-    static PATH: OnceLock<String> = OnceLock::new();
+fn augmented_path() -> &'static OsStr {
+    static PATH: OnceLock<OsString> = OnceLock::new();
     PATH.get_or_init(|| {
         let mut dirs: Vec<PathBuf> = Vec::new();
-        let home = dirs::home_dir();
-        let candidates = [
+        let home_dir = dirs::home_dir();
+
+        #[cfg(not(target_os = "windows"))]
+        for candidate in [
             "/opt/homebrew/bin",
             "/opt/homebrew/sbin",
             "/usr/local/bin",
@@ -23,44 +75,69 @@ fn augmented_path() -> &'static str {
             "/bin",
             "/usr/sbin",
             "/sbin",
-        ];
-        for c in candidates {
-            dirs.push(PathBuf::from(c));
+        ] {
+            dirs.push(PathBuf::from(candidate));
         }
-        if let Some(h) = &home {
+        if let Some(h) = &home_dir {
             for sub in [".cargo/bin", ".local/bin", "go/bin", ".volta/bin", ".asdf/shims"] {
+                dirs.push(h.join(sub));
+            }
+            #[cfg(target_os = "windows")]
+            for sub in ["AppData/Roaming/npm", "scoop/shims"] {
                 dirs.push(h.join(sub));
             }
         }
         // Preserve anything already on PATH (dev runs inherit a rich PATH).
-        if let Ok(existing) = std::env::var("PATH") {
-            for p in existing.split(':') {
-                dirs.push(PathBuf::from(p));
-            }
+        if let Some(existing) = std::env::var_os("PATH") {
+            dirs.extend(std::env::split_paths(&existing));
         }
         // Dedup while preserving order.
         let mut seen = std::collections::HashSet::new();
-        let joined: Vec<String> = dirs
+        let unique: Vec<PathBuf> = dirs
             .into_iter()
             .filter_map(|d| {
                 let s = d.to_string_lossy().into_owned();
                 if s.is_empty() || !seen.insert(s.clone()) {
                     None
                 } else {
-                    Some(s)
+                    Some(d)
                 }
             })
             .collect();
-        joined.join(":")
+        std::env::join_paths(unique).unwrap_or_default()
     })
+}
+
+#[cfg(target_os = "windows")]
+fn executable_names(cmd: &str) -> Vec<OsString> {
+    if Path::new(cmd).extension().is_some() {
+        return vec![OsString::from(cmd)];
+    }
+    let extensions = std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+    let mut names = vec![OsString::from(cmd)];
+    names.extend(
+        extensions
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+            .map(|extension| OsString::from(format!("{cmd}{extension}"))),
+    );
+    names
+}
+
+#[cfg(not(target_os = "windows"))]
+fn executable_names(cmd: &str) -> Vec<OsString> {
+    vec![OsString::from(cmd)]
 }
 
 /// Locate an executable on the augmented PATH. Returns the absolute path.
 pub fn which(cmd: &str) -> Option<PathBuf> {
-    for dir in augmented_path().split(':') {
-        let p = Path::new(dir).join(cmd);
-        if p.is_file() {
-            return Some(p);
+    for dir in std::env::split_paths(augmented_path()) {
+        for name in executable_names(cmd) {
+            let path = dir.join(name);
+            if path.is_file() {
+                return Some(path);
+            }
         }
     }
     None
@@ -77,7 +154,13 @@ pub async fn run(cmd: &str, args: &[&str]) -> Option<String> {
 }
 
 pub async fn run_with(cmd: &str, args: &[&str], timeout: Duration) -> Option<String> {
-    let bin = which(cmd)?;
+    let bin = match which(cmd) {
+        Some(bin) => bin,
+        None => {
+            record_scan_warning(format!("{cmd} was not found"));
+            return None;
+        }
+    };
     let mut c = Command::new(bin);
     c.args(args);
     c.env("PATH", augmented_path());
@@ -86,16 +169,54 @@ pub async fn run_with(cmd: &str, args: &[&str], timeout: Duration) -> Option<Str
         Ok(Ok(out)) if out.status.success() => {
             Some(String::from_utf8_lossy(&out.stdout).into_owned())
         }
-        _ => None,
+        Ok(Ok(out)) => {
+            record_scan_warning(format!(
+                "{} exited with {}: {}",
+                cmd,
+                out.status,
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+            None
+        }
+        Ok(Err(error)) => {
+            record_scan_warning(format!("failed to run {cmd}: {error}"));
+            None
+        }
+        Err(_) => {
+            record_scan_warning(format!("{cmd} timed out after {}s", timeout.as_secs()));
+            None
+        }
     }
 }
 
 /// Like `run`, but returns combined stdout+stderr regardless of exit status.
 /// Used by cleanup previews where non-zero exits still carry useful output.
 pub async fn run_capture(cmd: &str, args: &[&str], timeout: Duration) -> (bool, String) {
+    run_capture_inner(cmd, args, timeout, true).await
+}
+
+/// Capture output without treating a non-zero status as a scan warning. Some
+/// package managers use non-zero to mean "updates are available".
+pub async fn run_capture_untracked(
+    cmd: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> (bool, String) {
+    run_capture_inner(cmd, args, timeout, false).await
+}
+
+async fn run_capture_inner(
+    cmd: &str,
+    args: &[&str],
+    timeout: Duration,
+    track_nonzero_status: bool,
+) -> (bool, String) {
     let bin = match which(cmd) {
         Some(b) => b,
-        None => return (false, format!("{cmd} not found")),
+        None => {
+            record_scan_warning(format!("{cmd} was not found"));
+            return (false, format!("{cmd} not found"));
+        }
     };
     let mut c = Command::new(bin);
     c.args(args);
@@ -108,11 +229,124 @@ pub async fn run_capture(cmd: &str, args: &[&str], timeout: Duration) -> (bool, 
             if !err.trim().is_empty() {
                 s.push_str(&err);
             }
-            (out.status.success(), s)
+            let success = out.status.success();
+            if track_nonzero_status && !success {
+                record_scan_warning(format!("{cmd} exited with {}: {}", out.status, s.trim()));
+            }
+            (success, s)
         }
-        Ok(Err(e)) => (false, format!("failed to run: {e}")),
-        Err(_) => (false, "timed out".into()),
+        Ok(Err(e)) => {
+            record_scan_warning(format!("failed to run {cmd}: {e}"));
+            (false, format!("failed to run: {e}"))
+        }
+        Err(_) => {
+            record_scan_warning(format!("{cmd} timed out after {}s", timeout.as_secs()));
+            (false, "timed out".into())
+        }
     }
+}
+
+static MUTATION_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+pub struct MutationGuard {
+    _process_guard: tokio::sync::MutexGuard<'static, ()>,
+    lock_path: PathBuf,
+}
+
+impl Drop for MutationGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.lock_path);
+    }
+}
+
+#[cfg(test)]
+fn mutation_lock_path() -> PathBuf {
+    std::env::temp_dir().join(format!("ioinv-operation-test-{}.lock", std::process::id()))
+}
+
+#[cfg(not(test))]
+fn mutation_lock_path() -> PathBuf {
+    crate::db::default_path().with_file_name("operation.lock")
+}
+
+fn claim_mutation_file(path: &Path) -> bool {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let create = || {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)?;
+        writeln!(file, "{}", std::process::id())?;
+        Ok::<_, std::io::Error>(())
+    };
+    match create() {
+        Ok(()) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let owner_running = mutation_owner_is_running(path);
+            let stale = std::fs::metadata(path)
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .is_some_and(|age| age > Duration::from_secs(24 * 60 * 60));
+            if (!owner_running || stale) && std::fs::remove_file(path).is_ok() {
+                create().is_ok()
+            } else {
+                false
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(unix)]
+fn mutation_owner_is_running(path: &Path) -> bool {
+    let Ok(pid) = std::fs::read_to_string(path).map(|value| value.trim().to_string()) else {
+        return true;
+    };
+    if pid.parse::<u32>().is_err() {
+        return true;
+    }
+    std::process::Command::new("/bin/kill")
+        .args(["-0", &pid])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(true)
+}
+
+#[cfg(target_os = "windows")]
+fn mutation_owner_is_running(path: &Path) -> bool {
+    let Ok(pid) = std::fs::read_to_string(path).map(|value| value.trim().to_string()) else {
+        return true;
+    };
+    if pid.parse::<u32>().is_err() {
+        return true;
+    }
+    std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\"")))
+        .unwrap_or(true)
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+fn mutation_owner_is_running(_path: &Path) -> bool {
+    true
+}
+
+/// Destructive package-manager operations share one process-wide lock so two
+/// updates, removals, installs, or cleanups cannot run at the same time.
+pub fn try_mutation_lock() -> Option<MutationGuard> {
+    let process_guard = MUTATION_LOCK.try_lock().ok()?;
+    let lock_path = mutation_lock_path();
+    if !claim_mutation_file(&lock_path) {
+        return None;
+    }
+    Some(MutationGuard {
+        _process_guard: process_guard,
+        lock_path,
+    })
 }
 
 /// Best-effort recursive size of a directory in bytes, bounded so it can't
@@ -162,5 +396,18 @@ pub fn os_name() -> String {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         std::env::consts::OS.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mutation_lock_rejects_overlapping_operations() {
+        let first = try_mutation_lock().expect("first operation should acquire the lock");
+        assert!(try_mutation_lock().is_none());
+        drop(first);
+        assert!(try_mutation_lock().is_some());
     }
 }

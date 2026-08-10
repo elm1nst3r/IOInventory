@@ -27,6 +27,7 @@ export interface ScanInfo {
   os: string;
   duration_ms: number;
   item_count: number;
+  warnings: { source: string; message: string }[];
 }
 
 export interface Inventory {

@@ -78,7 +78,12 @@ export default function ListView() {
       return (
         i.name.toLowerCase().includes(q) ||
         i.collector.toLowerCase().includes(q) ||
-        (i.version ?? "").toLowerCase().includes(q)
+        (i.version ?? "").toLowerCase().includes(q) ||
+        (i.source_path ?? "").toLowerCase().includes(q) ||
+        (i.why ?? "").toLowerCase().includes(q) ||
+        (i.tags ?? []).some((tag) => tag.toLowerCase().includes(q)) ||
+        String(i.metadata?.description ?? "").toLowerCase().includes(q) ||
+        (i.metadata?.stacks ?? []).some((stack: string) => stack.toLowerCase().includes(q))
       );
     });
   }, [inventory, search, filters, activeView]);
@@ -177,11 +182,16 @@ export default function ListView() {
         <label className="lt-field">
           Category
           <div className="ms" ref={ddRef}>
-            <button className="ms-btn" onClick={() => setOpen((o) => !o)}>
+            <button
+              className="ms-btn"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              aria-haspopup="true"
+            >
               {catLabel} <ChevronDown size={14} />
             </button>
             {open && (
-              <div className="ms-panel">
+              <div className="ms-panel" role="group" aria-label="Inventory categories">
                 <label className="ms-row ms-all">
                   <input
                     type="checkbox"

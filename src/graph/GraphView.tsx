@@ -11,7 +11,6 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import ELK from "elkjs/lib/elk.bundled.js";
 import {
   Boxes,
   Cpu,
@@ -26,8 +25,6 @@ import { accentById } from "../lib/appearance";
 import { formatBytes } from "../lib/api";
 import { passesFilters, itemInView } from "../lib/filters";
 import type { Graph as GraphData, GraphNode } from "../lib/types";
-
-const elk = new ELK();
 
 const SIZES: Record<string, { w: number; h: number }> = {
   root: { w: 180, h: 62 },
@@ -286,12 +283,15 @@ export default function GraphView() {
       edges: vEdges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
     };
     let cancelled = false;
-    elk.layout(layoutGraph as any).then((res) => {
-      if (cancelled) return;
-      const pos = new Map<string, { x: number; y: number }>();
-      (res.children ?? []).forEach((c: any) => pos.set(c.id, { x: c.x, y: c.y }));
-      buildNodes(pos);
-    });
+    import("elkjs/lib/elk.bundled.js").then(({ default: ELK }) => {
+      const elk = new ELK();
+      return elk.layout(layoutGraph as any);
+    }).then((res) => {
+        if (cancelled) return;
+        const pos = new Map<string, { x: number; y: number }>();
+        (res.children ?? []).forEach((c: any) => pos.set(c.id, { x: c.x, y: c.y }));
+        buildNodes(pos);
+      });
     return () => {
       cancelled = true;
     };

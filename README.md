@@ -97,8 +97,9 @@ bulk-install everything you're missing.
 - 🔄 **In-app auto-update** — checks GitHub on launch, then downloads, **cryptographically verifies**,
   installs, and relaunches new versions in place.
 - 🌗 **Light & dark** blueprint-blue theme.
-- 🔒 **100% local** — no network calls, no telemetry. Config scans detect the *presence* of API
-  keys, never their values.
+- 🔒 **Local-first and telemetry-free** — inventory data stays on your machine. Network access is
+  limited to version/update checks and package-manager actions; config scans detect the *presence*
+  of API keys, never their values.
 
 ## 🔍 What it scans
 
@@ -195,8 +196,10 @@ cd src-tauri && cargo test scan_smoke -- --nocapture
 
 ## 🔐 Privacy
 
-Everything runs locally. No data leaves your machine, there is no telemetry, and secret values
+Inventory data and settings stay on your machine, there is no telemetry, and secret values
 (API keys, tokens) are never read or stored — only the *presence* of a configured provider is noted.
+The app does contact package registries and GitHub for version/update checks, and package-manager
+actions use their normal network access when an install or update requires it.
 
 ## 📄 License
 

@@ -352,7 +352,7 @@ mod tests {
             crate::model::Item::new(crate::model::Domain::AiAgent, "ollama", "llama3")
                 .version("8b"),
         ];
-        db.save_scan("testhost", "macOS", "t0", "t1", 1234, &items).unwrap();
+        db.save_scan("testhost", "macOS", "t0", "t1", 1234, &items, &[]).unwrap();
         Server { db, roots: None, forced_write: false }
     }
 

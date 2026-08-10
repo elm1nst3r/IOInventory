@@ -23,7 +23,7 @@ pub async fn scan(state: State<'_, AppState>) -> Result<Inventory, String> {
     let started_at = chrono::Utc::now().to_rfc3339();
     let timer = Instant::now();
 
-    let items = scan::run_all(settings.roots(), &settings).await;
+    let outcome = scan::run_all(settings.roots(), &settings).await;
 
     let finished_at = chrono::Utc::now().to_rfc3339();
     let duration_ms = timer.elapsed().as_millis() as i64;
@@ -32,7 +32,24 @@ pub async fn scan(state: State<'_, AppState>) -> Result<Inventory, String> {
 
     let inventory = {
         let mut db = state.db.lock().unwrap();
-        db.save_scan(&host, &os, &started_at, &finished_at, duration_ms, &items)
+        if outcome.items.is_empty()
+            && !outcome.warnings.is_empty()
+            && db.latest_inventory().map_err(|e| e.to_string())?.is_some()
+        {
+            return Err(format!(
+                "scan returned no items after {} collector error(s); the previous inventory was preserved",
+                outcome.warnings.len()
+            ));
+        }
+        db.save_scan(
+            &host,
+            &os,
+            &started_at,
+            &finished_at,
+            duration_ms,
+            &outcome.items,
+            &outcome.warnings,
+        )
             .map_err(|e| e.to_string())?;
         db.latest_inventory().map_err(|e| e.to_string())?
     };
@@ -253,7 +270,7 @@ pub async fn diff_snapshot(state: State<'_, AppState>, id: i64) -> Result<Diff, 
         (snap, current)
     };
     let (meta, base_items) = snap;
-    let label = format!("{} · {}", meta.name, &meta.created_at.chars().take(10).collect::<String>());
+    let label = format!("{} · {}", meta.name, meta.created_at.chars().take(10).collect::<String>());
     Ok(snapshot::diff(&base_items, &current.items, &label, "Current scan"))
 }
 

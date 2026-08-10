@@ -16,9 +16,33 @@ pub mod runtimes;
 pub mod util;
 
 use crate::model::Item;
+use crate::model::ScanWarning;
 use crate::settings::Settings;
 use std::future::Future;
+use std::ops::Deref;
 use std::path::PathBuf;
+
+pub struct ScanOutcome {
+    pub items: Vec<Item>,
+    pub warnings: Vec<ScanWarning>,
+}
+
+impl Deref for ScanOutcome {
+    type Target = [Item];
+
+    fn deref(&self) -> &Self::Target {
+        &self.items
+    }
+}
+
+impl<'a> IntoIterator for &'a ScanOutcome {
+    type Item = &'a Item;
+    type IntoIter = std::slice::Iter<'a, Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.iter()
+    }
+}
 
 /// Default workspace roots to search for git repositories.
 pub fn default_roots() -> Vec<PathBuf> {
@@ -33,9 +57,14 @@ pub fn default_roots() -> Vec<PathBuf> {
 /// Await `f` only when the source is enabled. Async fns are lazy, so a
 /// disabled collector's future is constructed but never polled — no process is
 /// spawned and no filesystem is walked.
-async fn when<F: Future<Output = Vec<Item>>>(enabled: bool, f: F) -> Vec<Item> {
+async fn when<F: Future<Output = Vec<Item>>>(
+    source: &str,
+    enabled: bool,
+    warnings: std::sync::Arc<std::sync::Mutex<Vec<ScanWarning>>>,
+    f: F,
+) -> Vec<Item> {
     if enabled {
-        f.await
+        util::with_scan_diagnostics(source, warnings, f).await
     } else {
         Vec::new()
     }
@@ -44,23 +73,24 @@ async fn when<F: Future<Output = Vec<Item>>>(enabled: bool, f: F) -> Vec<Item> {
 /// Run every enabled collector concurrently and return the merged item list.
 /// Each collector internally guards its own subprocesses with a timeout, so a
 /// hung tool can't stall the overall scan.
-pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> Vec<Item> {
+pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
     let on = |id: &str| settings.is_enabled(id);
+    let warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
     let (brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_) = tokio::join!(
-        when(on("homebrew"), homebrew::collect()),
-        when(on("npm"), npm::collect()),
-        when(on("pip"), pip::collect()),
-        when(on("cargo"), cargo::collect()),
-        when(on("gem"), gem::collect()),
-        when(on("runtimes"), runtimes::collect()),
-        when(on("docker"), docker::collect()),
-        when(on("claude"), claude::collect()),
-        when(on("ollama"), ollama::collect()),
-        when(on("hf_cache"), hf_cache::collect()),
-        when(on("ai_libs"), ai_libs::collect()),
-        when(on("ai_tools"), ai_tools::collect()),
-        when(on("repos"), repos::collect(&roots)),
+        when("homebrew", on("homebrew"), warnings.clone(), homebrew::collect()),
+        when("npm", on("npm"), warnings.clone(), npm::collect()),
+        when("pip", on("pip"), warnings.clone(), pip::collect()),
+        when("cargo", on("cargo"), warnings.clone(), cargo::collect()),
+        when("gem", on("gem"), warnings.clone(), gem::collect()),
+        when("runtimes", on("runtimes"), warnings.clone(), runtimes::collect()),
+        when("docker", on("docker"), warnings.clone(), docker::collect()),
+        when("claude", on("claude"), warnings.clone(), claude::collect()),
+        when("ollama", on("ollama"), warnings.clone(), ollama::collect()),
+        when("hf_cache", on("hf_cache"), warnings.clone(), hf_cache::collect()),
+        when("ai_libs", on("ai_libs"), warnings.clone(), ai_libs::collect()),
+        when("ai_tools", on("ai_tools"), warnings.clone(), ai_tools::collect()),
+        when("repos", on("repos"), warnings.clone(), repos::collect(&roots)),
     );
 
     let mut items = Vec::new();
@@ -76,10 +106,18 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> Vec<Item> {
         .iter()
         .any(|i| matches!(i.collector.as_str(), "homebrew" | "homebrew-cask" | "npm"))
     {
-        outdated::mark(&mut items).await;
+        util::with_scan_diagnostics(
+            "version_checks",
+            warnings.clone(),
+            outdated::mark(&mut items),
+        )
+        .await;
     }
 
-    items
+    let mut warnings = warnings.lock().map(|w| w.clone()).unwrap_or_default();
+    warnings.sort_by(|a, b| (&a.source, &a.message).cmp(&(&b.source, &b.message)));
+    warnings.dedup_by(|a, b| a.source == b.source && a.message == b.message);
+    ScanOutcome { items, warnings }
 }
 
 #[cfg(test)]
@@ -100,6 +138,7 @@ mod tests {
         let items = run_all(default_roots(), &all_off).await;
         let elapsed = t.elapsed();
         assert!(items.is_empty(), "expected no items, got {}", items.len());
+        assert!(items.warnings.is_empty(), "disabled collectors emitted warnings");
         assert!(
             elapsed < std::time::Duration::from_millis(500),
             "disabled collectors still did work: {elapsed:?}"
@@ -161,7 +200,7 @@ mod tests {
             .filter(|i| i.collector == "homebrew")
             .filter_map(|i| i.size_bytes.map(|b| (i.name.as_str(), b)))
             .collect();
-        brew_sized.sort_by(|a, b| b.1.cmp(&a.1));
+        brew_sized.sort_by_key(|item| std::cmp::Reverse(item.1));
         println!(
             "brew formulae with size: {} · top: {:?}",
             brew_sized.len(),

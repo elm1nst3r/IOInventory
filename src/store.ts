@@ -254,7 +254,8 @@ export const useStore = create<State>((set, get) => ({
       const items = inv.items.map((it: Item) =>
         it.item_key === key ? { ...it, tags } : it,
       );
-      set({ inventory: { ...inv, items } });
+      const inventory = { ...inv, items };
+      set({ inventory, liveInventory: inventory });
     }
     // If we removed the last item from the active view, drop the view.
     const view = get().activeView;
@@ -404,7 +405,8 @@ export const useStore = create<State>((set, get) => ({
       const items = inv.items.map((it: Item) =>
         it.item_key === key ? { ...it, note, why } : it,
       );
-      set({ inventory: { ...inv, items } });
+      const inventory = { ...inv, items };
+      set({ inventory, liveInventory: inventory });
     }
   },
 }));

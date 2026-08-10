@@ -122,6 +122,14 @@ fn find(collector: &str) -> Option<&'static ManageSpec> {
     MANAGE.iter().find(|s| s.collector == collector)
 }
 
+fn effective_tool(spec: &ManageSpec) -> &'static str {
+    if spec.tool == "pip3" && !util::is_available("pip3") && util::is_available("pip") {
+        "pip"
+    } else {
+        spec.tool
+    }
+}
+
 fn render(tool: &str, args: &[&str], name: &str) -> String {
     let filled: Vec<String> = args
         .iter()
@@ -134,11 +142,12 @@ pub fn info(collector: &str, name: &str) -> ActionInfo {
     let Some(spec) = find(collector) else {
         return ActionInfo::default();
     };
+    let tool = effective_tool(spec);
     ActionInfo {
-        update: spec.update.map(|a| render(spec.tool, a, name)),
-        delete: spec.delete.map(|a| render(spec.tool, a, name)),
-        install: spec.install.map(|a| render(spec.tool, a, name)),
-        available: util::is_available(spec.tool),
+        update: spec.update.map(|a| render(tool, a, name)),
+        delete: spec.delete.map(|a| render(tool, a, name)),
+        install: spec.install.map(|a| render(tool, a, name)),
+        available: util::is_available(tool),
     }
 }
 
@@ -165,12 +174,21 @@ pub async fn run(collector: &str, name: &str, action: &str) -> ActionResult {
     };
 
     // Substitute the name as a discrete argument (no shell involved).
+    let tool = effective_tool(spec);
     let args: Vec<String> = template.iter().map(|a| a.replace("{name}", name)).collect();
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    let command = format!("{} {}", spec.tool, args.join(" "));
+    let command = format!("{} {}", tool, args.join(" "));
+
+    let Some(_operation_guard) = util::try_mutation_lock() else {
+        return ActionResult {
+            command,
+            output: "Another install, update, uninstall, or cleanup is already running.".into(),
+            success: false,
+        };
+    };
 
     let (success, output) =
-        util::run_capture(spec.tool, &arg_refs, Duration::from_secs(600)).await;
+        util::run_capture(tool, &arg_refs, Duration::from_secs(600)).await;
 
     ActionResult {
         command,

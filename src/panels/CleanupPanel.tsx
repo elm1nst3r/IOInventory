@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import { useStore } from "../store";
 import type { CleanupAction, CleanupPreview, CleanupResult } from "../lib/types";
 
 export default function CleanupPanel() {
@@ -7,9 +8,12 @@ export default function CleanupPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<CleanupPreview | null>(null);
   const [result, setResult] = useState<CleanupResult | null>(null);
+  const scan = useStore((state) => state.scan);
 
   useEffect(() => {
-    api.listCleanups().then(setActions);
+    api.listCleanups().then(setActions).catch((error) => {
+      setResult({ id: "load", command: "", output: String(error), success: false });
+    });
   }, []);
 
   const groups = useMemo(() => {
@@ -26,6 +30,8 @@ export default function CleanupPanel() {
     setBusy(id);
     try {
       setPreview(await api.previewCleanup(id));
+    } catch (error) {
+      setResult({ id, command: "", output: String(error), success: false });
     } finally {
       setBusy(null);
     }
@@ -37,6 +43,9 @@ export default function CleanupPanel() {
       const r = await api.runCleanup(id);
       setResult(r);
       setPreview(null);
+      if (r.success) await scan();
+    } catch (error) {
+      setResult({ id, command: "", output: String(error), success: false });
     } finally {
       setBusy(null);
     }
@@ -51,6 +60,13 @@ export default function CleanupPanel() {
           <strong>preview first</strong> and only runs when you confirm.
         </p>
       </div>
+
+      {result?.id === "load" && (
+        <div className="cc-result fail" role="alert">
+          <div className="cc-preview-head">Could not load utilities</div>
+          <pre>{result.output}</pre>
+        </div>
+      )}
 
       {groups.map((g) => (
         <section key={g.key} className="util-group">
@@ -70,7 +86,7 @@ export default function CleanupPanel() {
                 <div className="cc-actions">
                   <button
                     className="btn"
-                    disabled={!a.available || busy === a.id}
+                    disabled={!a.available || busy !== null}
                     onClick={() => doPreview(a.id)}
                   >
                     {busy === a.id && preview?.id !== a.id ? "…" : "Preview"}
@@ -87,12 +103,12 @@ export default function CleanupPanel() {
                       <span>Run {a.category === "update" ? "update" : "this"}?</span>
                       <button
                         className="btn btn-danger"
-                        disabled={busy === a.id}
+                        disabled={busy !== null}
                         onClick={() => doRun(a.id)}
                       >
                         {busy === a.id ? "Running…" : "Confirm & run"}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => setPreview(null)}>
+                      <button className="btn btn-ghost" disabled={busy !== null} onClick={() => setPreview(null)}>
                         Cancel
                       </button>
                     </div>

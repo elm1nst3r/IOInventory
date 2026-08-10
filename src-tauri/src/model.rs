@@ -108,6 +108,12 @@ impl Item {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanWarning {
+    pub source: String,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanInfo {
     pub id: i64,
     pub started_at: String,
@@ -116,6 +122,8 @@ pub struct ScanInfo {
     pub os: String,
     pub duration_ms: i64,
     pub item_count: i64,
+    #[serde(default)]
+    pub warnings: Vec<ScanWarning>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

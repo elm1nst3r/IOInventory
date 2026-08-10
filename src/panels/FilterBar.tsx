@@ -42,13 +42,15 @@ export default function FilterBar() {
           <button
             className={`views-btn ${activeView ? "active" : ""}`}
             onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            aria-haspopup="true"
           >
             <Bookmark size={13} />
             {activeView ? `#${activeView}` : "All items"}
             <ChevronDown size={13} />
           </button>
           {open && (
-            <div className="ms-panel">
+            <div className="ms-panel" role="radiogroup" aria-label="Tagged views">
               <label className="ms-row ms-all">
                 <input
                   type="radio"

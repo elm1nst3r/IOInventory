@@ -1,4 +1,4 @@
-use crate::model::{Domain, Inventory, Item, ScanInfo, SnapshotMeta};
+use crate::model::{Domain, Inventory, Item, ScanInfo, ScanWarning, SnapshotMeta};
 use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};
@@ -107,10 +107,17 @@ impl Db {
             );
             "#,
         )?;
+        // Added in v0.10.x. SQLite has no `ADD COLUMN IF NOT EXISTS`, so an
+        // already-migrated database legitimately returns a duplicate-column error.
+        let _ = self.conn.execute(
+            "ALTER TABLE scans ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]'",
+            [],
+        );
         Ok(())
     }
 
     /// Persist a completed scan and its items. Returns the new scan id.
+    #[allow(clippy::too_many_arguments)]
     pub fn save_scan(
         &mut self,
         host: &str,
@@ -119,12 +126,23 @@ impl Db {
         finished_at: &str,
         duration_ms: i64,
         items: &[Item],
+        warnings: &[ScanWarning],
     ) -> Result<i64> {
         let tx = self.conn.transaction()?;
+        let warnings_json = serde_json::to_string(warnings)?;
         tx.execute(
-            "INSERT INTO scans (started_at, finished_at, host, os, duration_ms, item_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![started_at, finished_at, host, os, duration_ms, items.len() as i64],
+            "INSERT INTO scans
+             (started_at, finished_at, host, os, duration_ms, item_count, warnings_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                started_at,
+                finished_at,
+                host,
+                os,
+                duration_ms,
+                items.len() as i64,
+                warnings_json
+            ],
         )?;
         let scan_id = tx.last_insert_rowid();
         {
@@ -178,7 +196,7 @@ impl Db {
             return Ok(None);
         };
         let scan = self.conn.query_row(
-            "SELECT id, started_at, finished_at, host, os, duration_ms, item_count
+            "SELECT id, started_at, finished_at, host, os, duration_ms, item_count, warnings_json
              FROM scans WHERE id = ?1",
             params![scan_id],
             |r| {
@@ -190,6 +208,11 @@ impl Db {
                     os: r.get(4)?,
                     duration_ms: r.get(5)?,
                     item_count: r.get(6)?,
+                    warnings: r
+                        .get::<_, String>(7)
+                        .ok()
+                        .and_then(|json| serde_json::from_str(&json).ok())
+                        .unwrap_or_default(),
                 })
             },
         )?;
@@ -419,11 +442,26 @@ mod tests {
         let ripgrep = Item::new(Domain::PackageManager, "homebrew", "ripgrep").version("14.1.0");
         let jq = Item::new(Domain::PackageManager, "homebrew", "jq");
         let key = ripgrep.item_key.clone();
-        db.save_scan("host", "macOS", "t0", "t1", 100, &[ripgrep, jq]).unwrap();
+        let warnings = vec![ScanWarning {
+            source: "docker".into(),
+            message: "daemon unavailable".into(),
+        }];
+        db.save_scan(
+            "host",
+            "macOS",
+            "t0",
+            "t1",
+            100,
+            &[ripgrep, jq],
+            &warnings,
+        )
+        .unwrap();
 
         // Assign tags, then read back.
         db.set_item_tags(&key, &["favorite".into(), "cli".into()]).unwrap();
         let inv = db.latest_inventory().unwrap().unwrap();
+        assert_eq!(inv.scan.warnings.len(), 1);
+        assert_eq!(inv.scan.warnings[0].source, "docker");
         let tagged = inv.items.iter().find(|i| i.item_key == key).unwrap();
         assert_eq!(tagged.tags, vec!["cli".to_string(), "favorite".to_string()]);
 

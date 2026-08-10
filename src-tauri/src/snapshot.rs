@@ -82,6 +82,7 @@ pub fn to_inventory(meta: &SnapshotMeta, items: Vec<Item>) -> Inventory {
             os: meta.os.clone(),
             duration_ms: 0,
             item_count: meta.item_count,
+            warnings: Vec::new(),
         },
         items,
     }
@@ -126,7 +127,7 @@ pub fn diff(base: &[Item], target: &[Item], base_label: &str, target_label: &str
     let by_name = |a: &DiffItem, b: &DiffItem| a.name.to_lowercase().cmp(&b.name.to_lowercase());
     added.sort_by(by_name);
     removed.sort_by(by_name);
-    changed.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    changed.sort_by_key(|a| a.name.to_lowercase());
 
     Diff {
         base_label: base_label.into(),

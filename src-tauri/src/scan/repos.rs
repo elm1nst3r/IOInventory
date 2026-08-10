@@ -194,7 +194,7 @@ fn read_remote(repo: &Path) -> Option<String> {
 /// is `<unix_ts> <tz>`), returned as an ISO date.
 fn read_last_commit(repo: &Path) -> Option<String> {
     let log = std::fs::read_to_string(repo.join(".git/logs/HEAD")).ok()?;
-    let last = log.lines().filter(|l| !l.trim().is_empty()).last()?;
+    let last = log.lines().rfind(|l| !l.trim().is_empty())?;
     // Format: "<old> <new> <name> <email> <ts> <tz>\t<message>"
     let head = last.split('\t').next().unwrap_or(last);
     let tokens: Vec<&str> = head.split_whitespace().collect();

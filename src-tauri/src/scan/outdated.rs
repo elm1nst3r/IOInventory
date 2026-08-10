@@ -110,7 +110,7 @@ async fn npm_outdated() -> HashMap<String, String> {
     // npm outdated exits non-zero when packages are outdated, so capture output
     // regardless of exit status.
     let (_, out) =
-        util::run_capture("npm", &["outdated", "-g", "--json"], std::time::Duration::from_secs(8))
+        util::run_capture_untracked("npm", &["outdated", "-g", "--json"], std::time::Duration::from_secs(8))
             .await;
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) else {
         return map;

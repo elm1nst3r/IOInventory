@@ -7,7 +7,7 @@
   --line-2: #333b4d;
   --text: #e6e9f0;
   --text-dim: #9aa3b5;
-  --text-faint: #6b7488;
+  --text-faint: #768097;
   --accent: #2f9bf5;
   --accent-2: #5bb0ff;
   /* Overridden inline by lib/appearance.ts. --accent-grad is used wherever a
@@ -35,7 +35,7 @@
   --line-2: #c7cedb;
   --text: #1a1e28;
   --text-dim: #545c6e;
-  --text-faint: #8a93a5;
+  --text-faint: #667085;
   --accent: #1f83e0;
   --accent-2: #2f7bf0;
   --btn-hover: #dbe0ea;
@@ -44,6 +44,14 @@
 
 * {
   box-sizing: border-box;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
 }
 
 html,
@@ -143,6 +151,10 @@ body,
   font-size: 13px;
   width: 100%;
 }
+.searchbox:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
 .topbar-right {
   margin-left: auto;
   display: flex;
@@ -228,6 +240,11 @@ body,
   background: rgba(61, 139, 255, 0.14);
   color: #9cc4ff;
   border-bottom: 1px solid rgba(61, 139, 255, 0.3);
+}
+.banner.warning {
+  background: color-mix(in srgb, #ffb020 14%, var(--bg-1));
+  color: var(--text);
+  border-bottom: 1px solid color-mix(in srgb, #ffb020 45%, var(--line));
 }
 
 /* ---- Layout ---- */
@@ -611,7 +628,8 @@ body,
   border-top: 1px solid var(--line);
   padding-top: 16px;
 }
-.tags-editor > label {
+.tags-editor > label,
+.field-label {
   display: block;
   font-size: 12px;
   color: var(--text-dim);
@@ -675,6 +693,12 @@ body,
   outline: none;
   border-color: var(--accent);
 }
+.edit-error {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 
 .note-editor {
   margin-top: 18px;
@@ -709,16 +733,22 @@ body,
   margin: 0;
   padding: 0;
 }
-.detail-list li {
+.detail-list li button {
   display: flex;
+  width: 100%;
   align-items: baseline;
   gap: 8px;
   padding: 6px 8px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: none;
+  border: none;
+  text-align: left;
 }
-.detail-list li:hover {
+.detail-list li button:hover {
   background: var(--bg-2);
 }
 .dl-name {
@@ -1550,6 +1580,22 @@ body,
   }
 }
 
+@media (max-width: 1100px) {
+  .topbar {
+    gap: 10px;
+  }
+  .brand > span,
+  .scan-info {
+    display: none;
+  }
+  .searchbox {
+    min-width: 140px;
+  }
+  .tabs button {
+    padding-inline: 9px;
+  }
+}
+
 /* scrollbars */
 ::-webkit-scrollbar {
   width: 10px;
@@ -1995,4 +2041,11 @@ body,
 :root[data-theme="dark"][data-accent="matrix"] .set-snippet,
 :root[data-theme="dark"][data-accent="matrix"] .cc-cmd {
   color: var(--accent);
+}
+
+/* Keep keyboard focus visible even on controls whose mouse-focus treatment is
+   only a border change. This intentionally wins over local :focus rules. */
+:where(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent-2) !important;
+  outline-offset: 2px;
 }

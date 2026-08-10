@@ -566,7 +566,7 @@ fn search_items(s: &mut Server, a: &Value) -> Result<String, String> {
         .collect();
 
     if str_arg(a, "sort").as_deref() == Some("size") {
-        matched.sort_by(|x, y| y.size_bytes.unwrap_or(0).cmp(&x.size_bytes.unwrap_or(0)));
+        matched.sort_by_key(|item| std::cmp::Reverse(item.size_bytes.unwrap_or(0)));
     } else {
         matched.sort_by(|x, y| {
             x.collector
@@ -894,9 +894,19 @@ async fn scan(s: &mut Server, a: &Value) -> Result<String, String> {
 
     let started_at = chrono::Utc::now().to_rfc3339();
     let timer = Instant::now();
-    let items = crate::scan::run_all(roots, &settings).await;
+    let outcome = crate::scan::run_all(roots, &settings).await;
     let finished_at = chrono::Utc::now().to_rfc3339();
     let duration_ms = timer.elapsed().as_millis() as i64;
+
+    if outcome.items.is_empty()
+        && !outcome.warnings.is_empty()
+        && s.db.latest_inventory().map_err(|e| e.to_string())?.is_some()
+    {
+        return Err(format!(
+            "scan returned no items after {} collector error(s); the previous inventory was preserved",
+            outcome.warnings.len()
+        ));
+    }
 
     s.db.save_scan(
         &crate::scan::util::host_name(),
@@ -904,12 +914,22 @@ async fn scan(s: &mut Server, a: &Value) -> Result<String, String> {
         &started_at,
         &finished_at,
         duration_ms,
-        &items,
+        &outcome.items,
+        &outcome.warnings,
     )
     .map_err(|e| format!("scan succeeded but could not be saved: {e}"))?;
 
     let inv = inventory(s)?;
-    Ok(format!("Scan complete — {} items in {duration_ms} ms.\n\n{}", items.len(), summary_text(&inv)))
+    let warning_note = if outcome.warnings.is_empty() {
+        String::new()
+    } else {
+        format!(" ({} warning(s))", outcome.warnings.len())
+    };
+    Ok(format!(
+        "Scan complete — {} items in {duration_ms} ms{warning_note}.\n\n{}",
+        outcome.items.len(),
+        summary_text(&inv)
+    ))
 }
 
 // ------------------------------------------------------------------- snapshots

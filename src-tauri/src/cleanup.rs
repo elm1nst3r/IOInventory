@@ -230,6 +230,15 @@ async fn run_spec_steps(spec: &Spec, timeout: Duration, output: &mut String) -> 
 }
 
 pub async fn run(id: &str) -> CleanupResult {
+    let Some(_operation_guard) = util::try_mutation_lock() else {
+        return CleanupResult {
+            id: id.into(),
+            command: find(id).map(|spec| spec.command).unwrap_or("all available updaters").into(),
+            output: "Another install, update, uninstall, or cleanup is already running.".into(),
+            success: false,
+        };
+    };
+
     // "Update everything": run each available updater in sequence.
     if id == UPDATE_ALL {
         let timeout = Duration::from_secs(1800);

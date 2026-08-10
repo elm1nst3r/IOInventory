@@ -49,10 +49,12 @@ export default function DetailPanel() {
         </div>
         <ul className="detail-list">
           {childItems.slice(0, 400).map((i) => (
-            <li key={i.item_key} onClick={() => useStore.getState().select(i.item_key)}>
-              <span className="dl-name">{i.name}</span>
-              {i.version && <span className="dl-ver">{i.version}</span>}
-              {i.size_bytes ? <span className="dl-size">{formatBytes(i.size_bytes)}</span> : null}
+            <li key={i.item_key}>
+              <button type="button" onClick={() => useStore.getState().select(i.item_key)}>
+                <span className="dl-name">{i.name}</span>
+                {i.version && <span className="dl-ver">{i.version}</span>}
+                {i.size_bytes ? <span className="dl-size">{formatBytes(i.size_bytes)}</span> : null}
+              </button>
             </li>
           ))}
         </ul>
@@ -93,22 +95,33 @@ function ItemDetail({
     [inventoryItems],
   );
   const [tagInput, setTagInput] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const tags = item.tags ?? [];
 
-  function addTag(raw: string) {
+  async function addTag(raw: string) {
     const t = raw.trim().replace(/^#/, "");
     if (!t || tags.includes(t)) {
       setTagInput("");
       return;
     }
-    setItemTags(item.item_key, [...tags, t]);
-    setTagInput("");
+    try {
+      await setItemTags(item.item_key, [...tags, t]);
+      setTagInput("");
+      setEditError(null);
+    } catch (error) {
+      setEditError(String(error));
+    }
   }
-  function removeTag(t: string) {
-    setItemTags(
-      item.item_key,
-      tags.filter((x) => x !== t),
-    );
+  async function removeTag(t: string) {
+    try {
+      await setItemTags(
+        item.item_key,
+        tags.filter((x) => x !== t),
+      );
+      setEditError(null);
+    } catch (error) {
+      setEditError(String(error));
+    }
   }
 
   useEffect(() => {
@@ -118,6 +131,7 @@ function ItemDetail({
     setActions(null);
     setConfirm(null);
     setActionResult(null);
+    setEditError(null);
     api.itemActions(item.collector, item.name).then(setActions).catch(() => setActions(null));
   }, [item.item_key]);
 
@@ -129,6 +143,13 @@ function ItemDetail({
       setConfirm(null);
       // Re-scan so lists/graph reflect the change; give a beat to read the result.
       if (r.success) setTimeout(() => scan(), 1400);
+    } catch (error) {
+      setConfirm(null);
+      setActionResult({
+        command: "",
+        output: String(error),
+        success: false,
+      });
     } finally {
       setRunning(null);
     }
@@ -156,9 +177,14 @@ function ItemDetail({
     latest != null || info?.outdated === false || (info != null && info.latest_version != null);
 
   async function save() {
-    await onSave(item.item_key, item.note ?? "", why);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    try {
+      await onSave(item.item_key, item.note ?? "", why);
+      setEditError(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (error) {
+      setEditError(String(error));
+    }
   }
 
   return (
@@ -306,7 +332,7 @@ function ItemDetail({
       </dl>
 
       <div className="tags-editor">
-        <label>Tags · views</label>
+        <div className="field-label">Tags · views</div>
         <div className="tag-chips">
           {tags.map((t) => (
             <span key={t} className="tag-chip">
@@ -318,7 +344,7 @@ function ItemDetail({
                 #{t}
               </button>
               {!readOnly && (
-                <button className="tag-x" title="Remove tag" onClick={() => removeTag(t)}>
+                <button className="tag-x" title="Remove tag" aria-label={`Remove tag ${t}`} onClick={() => void removeTag(t)}>
                   <X size={11} />
                 </button>
               )}
@@ -330,6 +356,7 @@ function ItemDetail({
           <>
             <input
               className="tag-input"
+              aria-label="Add a tag"
               list="tag-suggestions"
               value={tagInput}
               placeholder="Add a tag (e.g. favorite) and press Enter"
@@ -337,7 +364,7 @@ function ItemDetail({
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === ",") {
                   e.preventDefault();
-                  addTag(tagInput);
+                  void addTag(tagInput);
                 }
               }}
             />
@@ -350,17 +377,20 @@ function ItemDetail({
         )}
       </div>
 
+      {editError && <div className="edit-error" role="alert">{editError}</div>}
+
       {readOnly ? (
         why ? (
           <div className="note-editor">
-            <label>Why is this here? (note)</label>
+            <div className="field-label">Why is this here? (note)</div>
             <p className="detail-desc">{why}</p>
           </div>
         ) : null
       ) : (
         <div className="note-editor">
-          <label>Why is this here? (note)</label>
+          <label htmlFor={`item-note-${item.item_key}`}>Why is this here? (note)</label>
           <textarea
+            id={`item-note-${item.item_key}`}
             value={why}
             placeholder="e.g. used by the Faceswap project for GPU inference"
             onChange={(e) => setWhy(e.target.value)}

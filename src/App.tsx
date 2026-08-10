@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import {
   RefreshCw,
   Network,
@@ -20,11 +20,12 @@ import { api } from "./lib/api";
 import GraphView from "./graph/GraphView";
 import ListView from "./views/ListView";
 import DetailPanel from "./panels/DetailPanel";
-import CleanupPanel from "./panels/CleanupPanel";
 import FilterBar from "./panels/FilterBar";
-import SnapshotsPanel from "./panels/SnapshotsPanel";
-import SettingsPanel from "./panels/SettingsPanel";
 import "./App.css";
+
+const CleanupPanel = lazy(() => import("./panels/CleanupPanel"));
+const SnapshotsPanel = lazy(() => import("./panels/SnapshotsPanel"));
+const SettingsPanel = lazy(() => import("./panels/SettingsPanel"));
 
 export default function App() {
   const {
@@ -104,17 +105,17 @@ export default function App() {
           <span>IO Inventory</span>
         </div>
 
-        <nav className="tabs">
-          <button className={tab === "graph" ? "active" : ""} onClick={() => setTab("graph")}>
+        <nav className="tabs" aria-label="Primary navigation">
+          <button aria-current={tab === "graph" ? "page" : undefined} className={tab === "graph" ? "active" : ""} onClick={() => setTab("graph")}>
             <Network size={15} /> Architecture
           </button>
-          <button className={tab === "list" ? "active" : ""} onClick={() => setTab("list")}>
+          <button aria-current={tab === "list" ? "page" : undefined} className={tab === "list" ? "active" : ""} onClick={() => setTab("list")}>
             <List size={15} /> List
           </button>
-          <button className={tab === "cleanup" ? "active" : ""} onClick={() => setTab("cleanup")}>
+          <button aria-current={tab === "cleanup" ? "page" : undefined} className={tab === "cleanup" ? "active" : ""} onClick={() => setTab("cleanup")}>
             <Wrench size={15} /> Utilities
           </button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+          <button aria-current={tab === "history" ? "page" : undefined} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             <History size={15} /> History
           </button>
         </nav>
@@ -123,6 +124,7 @@ export default function App() {
           <div className="searchbox">
             <Search size={14} />
             <input
+              aria-label="Search inventory"
               placeholder="Search packages, repos, skills…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -140,6 +142,7 @@ export default function App() {
             className="btn btn-ghost icon-btn"
             onClick={toggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -149,15 +152,17 @@ export default function App() {
               className="btn btn-ghost"
               onClick={() => setExportOpen((o) => !o)}
               disabled={!inventory}
+              aria-expanded={exportOpen}
+              aria-haspopup="menu"
             >
               <FileDown size={15} /> Export <ChevronDown size={13} />
             </button>
             {exportOpen && (
-              <div className="ms-panel export-menu">
-                <button className="ms-row" onClick={exportLedger}>
+              <div className="ms-panel export-menu" role="menu">
+                <button className="ms-row" role="menuitem" onClick={exportLedger}>
                   Ledger (AGENT_MAP.md)
                 </button>
-                <button className="ms-row" onClick={exportSnapshotFile}>
+                <button className="ms-row" role="menuitem" onClick={exportSnapshotFile}>
                   {viewingSnapshot ? "This snapshot" : "Snapshot"} (.ioinv.json)
                 </button>
               </div>
@@ -178,6 +183,7 @@ export default function App() {
             className={`btn btn-ghost icon-btn ${tab === "settings" ? "active" : ""}`}
             onClick={() => setTab("settings")}
             title="Settings"
+            aria-label="Settings"
           >
             <SettingsIcon size={16} />
           </button>
@@ -206,8 +212,17 @@ export default function App() {
           )}
         </div>
       )}
-      {error && <div className="banner error">{error}</div>}
-      {msg && <div className="banner info">{msg}</div>}
+      {error && <div className="banner error" role="alert">{error}</div>}
+      {msg && <div className="banner info" role="status">{msg}</div>}
+      {!viewingSnapshot && scan_ && scan_.warnings?.length > 0 && (
+        <div
+          className="banner warning"
+          role="status"
+          title={scan_.warnings.map((warning) => `${warning.source}: ${warning.message}`).join("\n")}
+        >
+          Scan completed with {scan_.warnings.length} warning{scan_.warnings.length === 1 ? "" : "s"}. Some sources may be incomplete.
+        </div>
+      )}
       {viewingSnapshot && (
         <div className="banner snapshot">
           <Eye size={14} /> Viewing snapshot <strong>{viewingSnapshot.name}</strong> ·{" "}
@@ -219,6 +234,7 @@ export default function App() {
       )}
 
       <main className="main">
+        <Suspense fallback={<div className="empty-hint">Loading view…</div>}>
         {loading ? (
           <div className="empty-hint">Loading…</div>
         ) : tab === "settings" ? (
@@ -238,6 +254,7 @@ export default function App() {
             </div>
           </div>
         )}
+        </Suspense>
       </main>
     </div>
   );

@@ -76,7 +76,7 @@ pub async fn collect() -> Vec<Item> {
 /// Extract the first version-looking token from a `--version` line.
 fn first_version(s: &str) -> String {
     let first = s.lines().next().unwrap_or("");
-    for tok in first.split(|c: char| c == ' ' || c == '"' || c == ',') {
+    for tok in first.split([' ', '"', ',']) {
         let t = tok.trim().trim_start_matches('v');
         if !t.is_empty() && t.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
             return t.to_string();

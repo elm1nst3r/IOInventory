@@ -278,7 +278,7 @@ fn collect_gemini_mcp(items: &mut Vec<Item>) {
 
 fn first_version(s: &str) -> String {
     let first = s.lines().next().unwrap_or("");
-    for tok in first.split(|c: char| c == ' ' || c == '"' || c == ',' || c == '(') {
+    for tok in first.split([' ', '"', ',', '(']) {
         let t = tok.trim().trim_start_matches('v');
         if !t.is_empty() && t.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
             return t.to_string();
