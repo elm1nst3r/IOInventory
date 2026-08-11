@@ -70,13 +70,19 @@ fn collect_entries(dir: &Path, collector: &str, items: &mut Vec<Item>) {
             if name.starts_with('.') {
                 continue;
             }
-            let clean = name
-                .trim_end_matches(".md")
-                .trim_end_matches(".json")
-                .to_string();
+            // Strip one definition extension, not every repetition of it —
+            // `trim_end_matches` would turn "notes.md.md" into "notes".
+            let clean = ["md", "json", "markdown"]
+                .iter()
+                .find_map(|ext| name.strip_suffix(&format!(".{ext}")))
+                .unwrap_or(&name);
+            let path = e.path().to_string_lossy().into_owned();
             items.push(
+                // `foo.md` and `foo.json` share a stem; key by path so they
+                // don't collide on item_key and get merged into one node.
                 Item::new(Domain::AiAgent, collector, clean)
-                    .path(e.path().to_string_lossy().into_owned()),
+                    .keyed(&path)
+                    .path(path),
             );
         }
     }
@@ -93,9 +99,13 @@ fn collect_plugins(v: &serde_json::Value, items: &mut Vec<Item>) {
                 return;
             }
             for (name, info) in map {
-                let version = info.get("version").and_then(|x| x.as_str());
+                // Skip manifest scalars like `"version": 2` sitting alongside
+                // the plugin entries — only objects/arrays describe a plugin.
+                if !info.is_object() && !info.is_array() {
+                    continue;
+                }
                 let mut item = Item::new(Domain::AiAgent, "claude-plugin", name.clone());
-                if let Some(ver) = version {
+                if let Some(ver) = plugin_version(info) {
                     item = item.version(ver);
                 }
                 items.push(item);
@@ -104,12 +114,30 @@ fn collect_plugins(v: &serde_json::Value, items: &mut Vec<Item>) {
         serde_json::Value::Array(arr) => {
             for info in arr {
                 if let Some(name) = info.get("name").and_then(|x| x.as_str()) {
-                    items.push(Item::new(Domain::AiAgent, "claude-plugin", name));
+                    let mut item = Item::new(Domain::AiAgent, "claude-plugin", name);
+                    if let Some(ver) = plugin_version(info) {
+                        item = item.version(ver);
+                    }
+                    items.push(item);
                 }
             }
         }
         _ => {}
     }
+}
+
+/// A plugin's version, whether the manifest stores the install record directly
+/// (`{ "version": "1.0.0" }`) or as a list of them, one per scope (v2's
+/// `{ "name@repo": [ { "scope": "user", "version": "1.0.0" } ] }`).
+fn plugin_version(info: &serde_json::Value) -> Option<String> {
+    let record = match info {
+        serde_json::Value::Array(installs) => installs.first()?,
+        other => other,
+    };
+    record
+        .get("version")
+        .and_then(|x| x.as_str())
+        .map(str::to_string)
 }
 
 fn collect_mcp(v: &serde_json::Value, items: &mut Vec<Item>) {

@@ -52,11 +52,13 @@ pub async fn collect() -> Vec<Item> {
             }
             let status = v.get("Status").and_then(|x| x.as_str()).unwrap_or("");
             let image = v.get("Image").and_then(|x| x.as_str()).unwrap_or("");
-            items.push(
-                Item::new(Domain::Container, "docker-container", name)
-                    .version(status)
-                    .meta(serde_json::json!({ "image": image })),
-            );
+            let mut item = Item::new(Domain::Container, "docker-container", name)
+                .meta(serde_json::json!({ "image": image }));
+            // An empty status would render as a bare "v" in the UI.
+            if !status.is_empty() {
+                item = item.version(status);
+            }
+            items.push(item);
         }
     }
 

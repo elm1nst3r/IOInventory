@@ -203,10 +203,13 @@ pub fn list(allow_write: bool) -> Vec<Value> {
         ),
         tool(
             "diff_snapshot",
-            "Compare a saved snapshot against the current inventory: what was added, removed, \
-             or changed version since. Use it to answer 'what changed on this machine?'.",
+            "Compare a saved snapshot against the current inventory — or against a second \
+             snapshot — showing what was added, removed, or changed version between them. Use \
+             it to answer 'what changed on this machine?', or to compare two points in time \
+             without touching the current state.",
             json!({
-                "id": { "type": "integer", "description": "Snapshot id from list_snapshots." }
+                "id": { "type": "integer", "description": "Base snapshot id from list_snapshots — the 'before' side." },
+                "target_id": { "type": "integer", "description": "Optional second snapshot id to compare against, as the 'after' side. Omit to compare against the current inventory." }
             }),
             &["id"],
             ann(true, false, false),
@@ -966,15 +969,35 @@ fn save_snapshot(s: &mut Server, a: &Value) -> Result<String, String> {
 
 fn diff_snapshot(s: &mut Server, a: &Value) -> Result<String, String> {
     let id = i64_arg(a, "id").ok_or("`id` must be a snapshot id (see list_snapshots)")?;
-    let (meta, base_items) = s
+    let target_id = i64_arg(a, "target_id");
+    if target_id == Some(id) {
+        return Err("`id` and `target_id` must be different snapshots".into());
+    }
+    let (base_meta, base_items) = s
         .db
         .get_snapshot(id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("no snapshot with id {id}"))?;
-    let current = inventory(s)?;
 
-    let label = format!("{} · {}", meta.name, meta.created_at.chars().take(10).collect::<String>());
-    let d = crate::snapshot::diff(&base_items, &current.items, &label, "Current scan");
+    // With no `target_id` the comparison is against the live inventory.
+    let (target_label, target_items) = match target_id {
+        Some(target_id) => {
+            let (meta, items) = s
+                .db
+                .get_snapshot(target_id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("no snapshot with id {target_id}"))?;
+            (crate::snapshot::label(&meta), items)
+        }
+        None => ("Current scan".to_string(), inventory(s)?.items),
+    };
+
+    let d = crate::snapshot::diff(
+        &base_items,
+        &target_items,
+        &crate::snapshot::label(&base_meta),
+        &target_label,
+    );
 
     let mut out = format!(
         "# {} → {}\n\n{} added · {} removed · {} changed · {} unchanged\n",

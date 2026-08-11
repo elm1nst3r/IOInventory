@@ -71,6 +71,15 @@ pub fn parse_import(content: &str) -> Result<SnapshotFile, String> {
     })
 }
 
+/// How a snapshot is named in a diff header: "My setup · 2026-08-10".
+pub fn label(meta: &SnapshotMeta) -> String {
+    format!(
+        "{} · {}",
+        meta.name,
+        meta.created_at.chars().take(10).collect::<String>()
+    )
+}
+
 /// Reconstruct an Inventory from a stored snapshot so it can feed the graph/list.
 pub fn to_inventory(meta: &SnapshotMeta, items: Vec<Item>) -> Inventory {
     Inventory {

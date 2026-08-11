@@ -208,9 +208,13 @@ pub async fn collect() -> Vec<Item> {
         }
     }
 
-    while let Some(Ok((idx, version))) = version_jobs.join_next().await {
-        if !version.is_empty() {
-            items[idx].version = Some(version);
+    // Drain every probe: a `while let Some(Ok(..))` would stop at the first
+    // join error and silently drop the versions still in flight behind it.
+    while let Some(joined) = version_jobs.join_next().await {
+        if let Ok((idx, version)) = joined {
+            if !version.is_empty() {
+                items[idx].version = Some(version);
+            }
         }
     }
 

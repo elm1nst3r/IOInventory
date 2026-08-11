@@ -1,9 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { revealItemInDir, openUrl, openPath } from "@tauri-apps/plugin-opener";
-import { ExternalLink, FolderOpen, FileText, ArrowUpCircle, Trash2, AlertTriangle, X } from "lucide-react";
+import {
+  ExternalLink,
+  FolderOpen,
+  FileText,
+  ArrowUpCircle,
+  PackagePlus,
+  Trash2,
+  AlertTriangle,
+  X,
+} from "lucide-react";
 import { useStore } from "../store";
 import { api, formatBytes } from "../lib/api";
 import type { ActionInfo, ActionResult, Item } from "../lib/types";
+
+type Action = "update" | "delete" | "install";
+
+const ACTION_LABELS: Record<Action, { question: string; confirm: string }> = {
+  update: { question: "Update this item?", confirm: "Confirm update" },
+  delete: { question: "Uninstall this item?", confirm: "Confirm uninstall" },
+  install: { question: "Install this item?", confirm: "Confirm install" },
+};
 
 export default function DetailPanel() {
   const selectedKey = useStore((s) => s.selectedKey);
@@ -80,13 +97,21 @@ function ItemDetail({
   const enriching = useStore((s) => s.enriching === item.item_key);
 
   const [actions, setActions] = useState<ActionInfo | null>(null);
-  const [confirm, setConfirm] = useState<"update" | "delete" | null>(null);
-  const [running, setRunning] = useState<"update" | "delete" | null>(null);
+  const [confirm, setConfirm] = useState<Action | null>(null);
+  const [running, setRunning] = useState<Action | null>(null);
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
 
   const setItemTags = useStore((s) => s.setItemTags);
   const setView = useStore((s) => s.setView);
   const readOnly = useStore((s) => s.viewingSnapshot !== null);
+  const liveInventory = useStore((s) => s.liveInventory);
+  // While a snapshot is on screen its items are historical: some may no longer
+  // be on the machine. Those are the ones worth offering to install — anything
+  // in the live inventory is by definition already here.
+  const missingLocally =
+    readOnly &&
+    liveInventory !== null &&
+    !liveInventory.items.some((i) => i.item_key === item.item_key);
   // NOTE: derive with useMemo — a selector that returns a fresh array each call
   // sends useSyncExternalStore into an infinite render loop.
   const inventoryItems = useStore((s) => s.inventory?.items);
@@ -135,7 +160,7 @@ function ItemDetail({
     api.itemActions(item.collector, item.name).then(setActions).catch(() => setActions(null));
   }, [item.item_key]);
 
-  async function doAction(action: "update" | "delete") {
+  async function doAction(action: Action) {
     setRunning(action);
     try {
       const r = await api.runItemAction(item.collector, item.name, action);
@@ -169,6 +194,20 @@ function ItemDetail({
 
   // Update status: prefer scan-time signal, fall back to enrichment.
   const scanLatest: string | undefined = item.metadata?.latest;
+  // Which management actions this item gets. In the live view that's update /
+  // uninstall; in a snapshot the only sensible one is putting back something
+  // that's no longer here.
+  const offered = !actions
+    ? []
+    : readOnly
+      ? missingLocally && actions.install
+        ? [{ action: "install" as const, label: "Install", Icon: PackagePlus }]
+        : []
+      : [
+          actions.update && { action: "update" as const, label: "Update", Icon: ArrowUpCircle },
+          actions.delete && { action: "delete" as const, label: "Uninstall", Icon: Trash2 },
+        ].filter((b) => !!b);
+
   const scanOutdated = Boolean(item.metadata?.outdated);
   const outdated = scanOutdated || info?.outdated === true;
   const latest = scanLatest ?? info?.latest_version ?? undefined;
@@ -234,33 +273,27 @@ function ItemDetail({
         </div>
       )}
 
-      {!readOnly && actions && (actions.update || actions.delete) && (
+      {actions && offered.length > 0 && (
         <div className="manage">
+          {missingLocally && (
+            <div className="manage-note">
+              Not installed on this machine — it was here when the snapshot was taken.
+            </div>
+          )}
           <div className="manage-btns">
-            {actions.update && (
+            {offered.map(({ action, label, Icon }) => (
               <button
-                className="btn qa-btn"
+                key={action}
+                className={`btn qa-btn ${action === "delete" ? "manage-del" : ""}`}
                 disabled={!actions.available || running !== null}
                 onClick={() => {
-                  setConfirm("update");
+                  setConfirm(action);
                   setActionResult(null);
                 }}
               >
-                <ArrowUpCircle size={14} /> Update
+                <Icon size={14} /> {label}
               </button>
-            )}
-            {actions.delete && (
-              <button
-                className="btn qa-btn manage-del"
-                disabled={!actions.available || running !== null}
-                onClick={() => {
-                  setConfirm("delete");
-                  setActionResult(null);
-                }}
-              >
-                <Trash2 size={14} /> Uninstall
-              </button>
-            )}
+            ))}
           </div>
           {!actions.available && (
             <div className="manage-note">Its package manager isn’t on your PATH.</div>
@@ -270,23 +303,15 @@ function ItemDetail({
             <div className={`manage-confirm ${confirm === "delete" ? "danger" : ""}`}>
               {confirm === "delete" && <AlertTriangle size={15} className="mc-warn" />}
               <div className="mc-body">
-                <div className="mc-q">
-                  {confirm === "delete" ? "Uninstall this item?" : "Update this item?"}
-                </div>
-                <code className="mc-cmd">
-                  {confirm === "update" ? actions.update : actions.delete}
-                </code>
+                <div className="mc-q">{ACTION_LABELS[confirm].question}</div>
+                <code className="mc-cmd">{actions[confirm]}</code>
                 <div className="mc-actions">
                   <button
                     className={`btn ${confirm === "delete" ? "btn-danger" : "btn-primary"}`}
                     disabled={running !== null}
                     onClick={() => doAction(confirm)}
                   >
-                    {running
-                      ? "Running…"
-                      : confirm === "delete"
-                        ? "Confirm uninstall"
-                        : "Confirm update"}
+                    {running ? "Running…" : ACTION_LABELS[confirm].confirm}
                   </button>
                   <button className="btn btn-ghost" onClick={() => setConfirm(null)}>
                     Cancel

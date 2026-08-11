@@ -59,6 +59,7 @@ export default function SettingsPanel() {
     checkForUpdates,
     installUpdate,
     updateError,
+    setAutoUpdateCheck,
   } = useStore();
 
   const [mcp, setMcp] = useState<McpInfo | null>(null);
@@ -431,6 +432,23 @@ export default function SettingsPanel() {
           </h3>
           <span>{appVersion ? `You're on v${appVersion}.` : ""}</span>
         </div>
+
+        <label className={`set-toggle plain ${settings.auto_update_check ? "on" : ""}`}>
+          <input
+            type="checkbox"
+            checked={settings.auto_update_check}
+            disabled={settingsSaving}
+            onChange={(e) => setAutoUpdateCheck(e.target.checked)}
+          />
+          <span className="set-source-text">
+            <span className="set-source-name">Check for updates on launch</span>
+            <span className="set-source-desc">
+              {settings.auto_update_check
+                ? "When the app starts it asks GitHub whether a newer release exists, and shows a banner if so. Nothing is downloaded or installed until you click Download & install."
+                : "The app won't contact the network on its own. Use the button below to check whenever you want."}
+            </span>
+          </span>
+        </label>
 
         {updateAvailable ? (
           <div className="set-note">

@@ -477,6 +477,66 @@ mod tests {
         println!("mcp_write_toggle_gates_tools_live OK");
     }
 
+    /// A snapshot can be diffed against the live inventory (no `target_id`) or
+    /// against a second snapshot, which must not touch the current state.
+    #[tokio::test]
+    async fn mcp_diffs_snapshot_against_snapshot() {
+        let mut s = test_server();
+
+        // Snapshot A: the machine as the fixture left it.
+        let a = s.handle(req(1, "tools/call", json!({
+            "name": "save_snapshot", "arguments": { "name": "A" }
+        }))).await.unwrap();
+        assert_eq!(a["result"]["isError"], false, "{a}");
+
+        // Move the machine on, then take snapshot B from the new state.
+        let moved = vec![
+            crate::model::Item::new(crate::model::Domain::PackageManager, "homebrew", "ripgrep")
+                .version("15.0.0"),
+            crate::model::Item::new(crate::model::Domain::PackageManager, "homebrew", "fd")
+                .version("10.2.0"),
+        ];
+        s.db.save_scan("testhost", "macOS", "t2", "t3", 900, &moved, &[]).unwrap();
+        let b = s.handle(req(2, "tools/call", json!({
+            "name": "save_snapshot", "arguments": { "name": "B" }
+        }))).await.unwrap();
+        assert_eq!(b["result"]["isError"], false, "{b}");
+
+        let ids: Vec<i64> = s.db.list_snapshots().unwrap().iter().map(|m| m.id).collect();
+        let (b_id, a_id) = (ids[0], ids[1]); // newest first
+
+        let diffed = s.handle(req(3, "tools/call", json!({
+            "name": "diff_snapshot", "arguments": { "id": a_id, "target_id": b_id }
+        }))).await.unwrap();
+        let text = diffed["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("A ·") && text.contains("B ·"), "both labels expected:\n{text}");
+        assert!(
+            !text.contains("Current scan"),
+            "a snapshot-to-snapshot diff must not involve the live inventory:\n{text}"
+        );
+        // llama3 was dropped, fd gained, ripgrep bumped.
+        assert!(text.contains("fd"), "added item missing:\n{text}");
+        assert!(text.contains("llama3"), "removed item missing:\n{text}");
+        assert!(text.contains("14.1.0 → 15.0.0"), "version change missing:\n{text}");
+
+        // Omitting target_id still compares against the current inventory.
+        let vs_current = s.handle(req(4, "tools/call", json!({
+            "name": "diff_snapshot", "arguments": { "id": a_id }
+        }))).await.unwrap();
+        assert!(vs_current["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("Current scan"));
+
+        // Comparing a snapshot with itself is a user error, not an empty diff.
+        let same = s.handle(req(5, "tools/call", json!({
+            "name": "diff_snapshot", "arguments": { "id": a_id, "target_id": a_id }
+        }))).await.unwrap();
+        assert_eq!(same["result"]["isError"], true, "{same}");
+
+        println!("mcp_diffs_snapshot_against_snapshot OK");
+    }
+
     #[tokio::test]
     async fn mcp_notes_tags_and_resources() {
         let mut s = test_server();

@@ -205,6 +205,23 @@ pub async fn run_capture_untracked(
     run_capture_inner(cmd, args, timeout, false).await
 }
 
+/// Stdout only, whatever the exit status, and without recording a warning.
+///
+/// For commands whose stdout is machine-readable (JSON) but which also exit
+/// non-zero as a signal — `npm outdated` is the case that matters. The combined
+/// capture would splice stderr warnings into the payload and break the parse.
+pub async fn run_stdout_untracked(cmd: &str, args: &[&str], timeout: Duration) -> Option<String> {
+    let bin = which(cmd)?;
+    let mut c = Command::new(bin);
+    c.args(args);
+    c.env("PATH", augmented_path());
+    c.kill_on_drop(true);
+    match tokio::time::timeout(timeout, c.output()).await {
+        Ok(Ok(out)) => Some(String::from_utf8_lossy(&out.stdout).into_owned()),
+        _ => None,
+    }
+}
+
 async fn run_capture_inner(
     cmd: &str,
     args: &[&str],

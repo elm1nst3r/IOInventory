@@ -126,7 +126,15 @@ pub fn catalog() -> Vec<ScanSourceInfo> {
         .collect()
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Serde default for opt-*out* flags: absent from the stored JSON means the
+/// user never turned it off, which has to read as `true`. A bare
+/// `#[serde(default)]` would give `false` and silently disable the feature for
+/// everyone whose settings row predates the field.
+fn enabled() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     /// Source ids the user has switched off. Empty means "scan everything".
     #[serde(default)]
@@ -144,6 +152,27 @@ pub struct Settings {
     /// effect immediately, without restarting the agent's client.
     #[serde(default)]
     pub mcp_allow_write: bool,
+    /// Whether the app reaches out for a new release on launch. On by default;
+    /// switching it off makes update checking manual, and is the only setting
+    /// here that stops the app talking to the network on its own.
+    ///
+    /// This gates the *check* only — a download and install has always needed
+    /// an explicit click.
+    #[serde(default = "enabled")]
+    pub auto_update_check: bool,
+}
+
+/// Hand-written rather than derived: `auto_update_check` defaults to on, and
+/// `#[derive(Default)]` would make it `false`.
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            disabled_sources: Vec::new(),
+            roots: Vec::new(),
+            mcp_allow_write: false,
+            auto_update_check: true,
+        }
+    }
 }
 
 impl Settings {
@@ -218,5 +247,32 @@ mod tests {
         let old: Settings = serde_json::from_str("{}").unwrap();
         assert!(old.disabled_sources.is_empty());
         println!("settings_round_trip_and_sanitize OK");
+    }
+
+    /// Opt-out flags must survive an upgrade switched *on*. A settings row
+    /// written before `auto_update_check` existed has no such key, and the
+    /// naive `#[serde(default)]` would read it back as `false` — silently
+    /// disabling update checks for every existing install.
+    #[test]
+    fn auto_update_check_defaults_on() {
+        assert!(Settings::default().auto_update_check);
+
+        // A row from before the field was added.
+        let legacy: Settings =
+            serde_json::from_str(r#"{"disabled_sources":["docker"],"roots":[]}"#).unwrap();
+        assert!(
+            legacy.auto_update_check,
+            "an upgraded install must keep checking for updates"
+        );
+
+        // An explicit opt-out is honoured, and survives a round trip through
+        // the settings row (that's how it's stored).
+        let off = Settings { auto_update_check: false, ..Default::default() };
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&off).unwrap()).unwrap();
+        assert!(!back.auto_update_check, "an explicit opt-out must persist");
+
+        // Sanitizing scrubs source ids; it must not resurrect the flag.
+        assert!(!off.sanitized().auto_update_check);
+        println!("auto_update_check_defaults_on OK");
     }
 }

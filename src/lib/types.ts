@@ -81,6 +81,7 @@ export interface CleanupResult {
 export interface ActionInfo {
   update?: string | null;
   delete?: string | null;
+  install?: string | null;
   available: boolean;
 }
 
@@ -148,6 +149,8 @@ export interface Settings {
   roots: string[];
   /** Whether the MCP server exposes install/update/uninstall and cleanups. */
   mcp_allow_write: boolean;
+  /** Whether the app looks for a new release on launch. On by default. */
+  auto_update_check: boolean;
 }
 
 export interface McpInfo {

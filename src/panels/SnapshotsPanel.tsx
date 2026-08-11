@@ -45,6 +45,9 @@ export default function SnapshotsPanel() {
 
   const [diff, setDiff] = useState<Diff | null>(null);
   const [diffFor, setDiffFor] = useState<SnapshotMeta | null>(null);
+  /** The "after" side of the comparison. null = the current scan. */
+  const [targetId, setTargetId] = useState<number | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; current: string }>({
@@ -95,17 +98,37 @@ export default function SnapshotsPanel() {
     }
   }
 
-  async function compare(meta: SnapshotMeta) {
-    setDiff(null);
-    setResults([]);
-    setSelected(new Set());
-    setDiffFor(meta);
-    try {
-      setDiff(await api.diffSnapshot(meta.id));
-    } catch (e) {
-      flash(String(e));
-      setDiffFor(null);
+  // Load whenever the pair being compared changes, or after an install run
+  // bumps the token. Keyed on ids so re-fetching the snapshot list (which
+  // returns fresh objects) doesn't retrigger it.
+  useEffect(() => {
+    if (!diffFor) {
+      setDiff(null);
+      return;
     }
+    let cancelled = false;
+    setDiff(null);
+    setSelected(new Set());
+    api
+      .diffSnapshot(diffFor.id, targetId)
+      .then((d) => {
+        if (!cancelled) setDiff(d);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          flash(String(e));
+          setDiffFor(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [diffFor?.id, targetId, reloadToken]);
+
+  function compare(meta: SnapshotMeta) {
+    setResults([]);
+    setTargetId(null);
+    setDiffFor(meta);
   }
 
   async function exportSnap(meta: SnapshotMeta) {
@@ -121,10 +144,9 @@ export default function SnapshotsPanel() {
     if (!confirm(`Delete snapshot “${meta.name}”?`)) return;
     try {
       await api.deleteSnapshot(meta.id);
-      if (diffFor?.id === meta.id) {
-        setDiff(null);
-        setDiffFor(null);
-      }
+      if (diffFor?.id === meta.id) setDiffFor(null);
+      // Deleting the snapshot being compared against falls back to the current scan.
+      if (targetId === meta.id) setTargetId(null);
       await refreshSnapshots();
     } catch (e) {
       flash(String(e));
@@ -132,9 +154,12 @@ export default function SnapshotsPanel() {
   }
 
   // The installable subset of "missing here" (present in snapshot, not current).
+  // Only meaningful when the "after" side is this machine — installing what's
+  // absent from another *snapshot* would be nonsense.
   const installableMissing = useMemo(
-    () => (diff ? diff.removed.filter((i) => INSTALLABLE.has(i.collector)) : []),
-    [diff],
+    () =>
+      diff && targetId === null ? diff.removed.filter((i) => INSTALLABLE.has(i.collector)) : [],
+    [diff, targetId],
   );
 
   function toggle(key: string) {
@@ -171,17 +196,12 @@ export default function SnapshotsPanel() {
       }
       setResults([...done]);
     }
-    setInstalling(false);
-    // Refresh live inventory and the diff so installed items drop off the list.
+    // Refresh live inventory, then the diff so installed items drop off the
+    // list. Stay "installing" until that settles — re-enabling the controls
+    // over a diff that's about to be replaced just invites a double run.
     await scan();
-    if (diffFor) {
-      try {
-        setDiff(await api.diffSnapshot(diffFor.id));
-      } catch {
-        /* ignore */
-      }
-    }
-    setSelected(new Set());
+    setReloadToken((t) => t + 1);
+    setInstalling(false);
   }
 
   return (
@@ -256,14 +276,25 @@ export default function SnapshotsPanel() {
         </div>
 
         <div className="snap-diff">
-          {!diff ? (
+          {!diffFor ? (
             <div className="empty-hint" style={{ height: "100%" }}>
               Pick <GitCompare size={14} style={{ margin: "0 4px", verticalAlign: "-2px" }} /> on a
-              snapshot to compare it with your current scan.
+              snapshot to compare it with your current scan — or with another snapshot.
+            </div>
+          ) : !diff ? (
+            <div className="empty-hint" style={{ height: "100%" }}>
+              Comparing…
             </div>
           ) : (
             <DiffView
               diff={diff}
+              base={diffFor}
+              snapshots={snapshots}
+              targetId={targetId}
+              onTargetChange={(id) => {
+                setResults([]);
+                setTargetId(id);
+              }}
               installableMissing={installableMissing}
               selected={selected}
               onToggle={toggle}
@@ -282,6 +313,10 @@ export default function SnapshotsPanel() {
 
 function DiffView({
   diff,
+  base,
+  snapshots,
+  targetId,
+  onTargetChange,
   installableMissing,
   selected,
   onToggle,
@@ -292,6 +327,10 @@ function DiffView({
   results,
 }: {
   diff: Diff;
+  base: SnapshotMeta;
+  snapshots: SnapshotMeta[];
+  targetId: number | null;
+  onTargetChange: (id: number | null) => void;
   installableMissing: DiffItem[];
   selected: Set<string>;
   onToggle: (k: string) => void;
@@ -303,25 +342,48 @@ function DiffView({
 }) {
   const installableKeys = new Set(installableMissing.map(diKey));
   const okCount = results.filter((r) => r.ok).length;
+  const vsCurrent = targetId === null;
 
   return (
     <div className="diff">
       <div className="diff-head">
         <span className="diff-base">{diff.base_label}</span>
         <ArrowRight size={14} />
-        <span className="diff-target">{diff.target_label}</span>
+        <label className="diff-target-pick">
+          <span className="sr-only">Compare against</span>
+          <select
+            value={targetId ?? ""}
+            disabled={installing}
+            onChange={(e) => onTargetChange(e.target.value === "" ? null : Number(e.target.value))}
+          >
+            <option value="">Current scan</option>
+            {snapshots
+              .filter((s) => s.id !== base.id)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {s.created_at.slice(0, 10)}
+                </option>
+              ))}
+          </select>
+        </label>
       </div>
       <div className="diff-summary">
         <span className="d-add">+{diff.added.length} added</span>
-        <span className="d-rem">−{diff.removed.length} missing here</span>
+        <span className="d-rem">
+          −{diff.removed.length} {vsCurrent ? "missing here" : "only in base"}
+        </span>
         <span className="d-chg">~{diff.changed.length} changed</span>
         <span className="d-same">{diff.unchanged} unchanged</span>
       </div>
 
-      {/* Missing here → installable */}
+      {/* Missing here → installable (only when the target is this machine) */}
       <section className="diff-sec">
         <div className="diff-sec-head">
-          <h4>Missing here — only in the snapshot ({diff.removed.length})</h4>
+          <h4>
+            {vsCurrent
+              ? `Missing here — only in the snapshot (${diff.removed.length})`
+              : `Only in ${diff.base_label} (${diff.removed.length})`}
+          </h4>
           {installableMissing.length > 0 && (
             <div className="install-bar">
               <label className="sel-all">
@@ -378,7 +440,13 @@ function DiffView({
               </label>
             );
           })}
-          {diff.removed.length === 0 && <div className="diff-empty">Nothing — you have everything in the snapshot.</div>}
+          {diff.removed.length === 0 && (
+            <div className="diff-empty">
+              {vsCurrent
+                ? "Nothing — you have everything in the snapshot."
+                : "Nothing — everything in the base is also in the comparison."}
+            </div>
+          )}
         </div>
       </section>
 
@@ -404,7 +472,13 @@ function DiffView({
       {/* Added (only in current) */}
       {diff.added.length > 0 && (
         <section className="diff-sec">
-          <div className="diff-sec-head"><h4>Only in current — not in the snapshot ({diff.added.length})</h4></div>
+          <div className="diff-sec-head">
+            <h4>
+              {vsCurrent
+                ? `Only in current — not in the snapshot (${diff.added.length})`
+                : `Only in ${diff.target_label} (${diff.added.length})`}
+            </h4>
+          </div>
           <div className="diff-rows">
             {diff.added.map((i) => (
               <div key={diKey(i)} className="diff-row">

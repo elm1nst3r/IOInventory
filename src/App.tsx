@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   RefreshCw,
   Network,
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   Eye,
   X,
+  AlertTriangle,
   Settings as SettingsIcon,
   DownloadCloud,
 } from "lucide-react";
@@ -49,10 +50,15 @@ export default function App() {
     updateProgress,
     installUpdate,
     dismissUpdate,
+    scanSources,
+    toggleSource,
+    settingsSaving,
   } = useStore();
   const [msg, setMsg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const msgTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [warningsOpen, setWarningsOpen] = useState(false);
 
   useEffect(() => {
     init();
@@ -67,9 +73,16 @@ export default function App() {
     return () => document.removeEventListener("mousedown", onDown);
   }, [exportOpen]);
 
+  // Clear any in-flight timer first: without this the previous message's
+  // timeout fires against the new one and hides it early.
+  useEffect(() => () => {
+    if (msgTimer.current) clearTimeout(msgTimer.current);
+  }, []);
+
   function flash(text: string) {
+    if (msgTimer.current) clearTimeout(msgTimer.current);
     setMsg(text);
-    setTimeout(() => setMsg(null), 4500);
+    msgTimer.current = setTimeout(() => setMsg(null), 4500);
   }
 
   async function exportLedger() {
@@ -92,6 +105,27 @@ export default function App() {
   }
 
   const scan_ = inventory?.scan;
+  const warnings = scan_?.warnings;
+
+  // One entry per source that reported something, so five brew failures read as
+  // "Homebrew (5)" rather than five loose lines. A warning source is a
+  // collector id, which is also a ScanSource id — except `version_checks`,
+  // which is the outdated/deprecated pass and isn't separately toggleable.
+  const warningGroups = useMemo(() => {
+    const by = new Map<string, string[]>();
+    for (const w of warnings ?? []) {
+      if (!by.has(w.source)) by.set(w.source, []);
+      by.get(w.source)!.push(w.message);
+    }
+    return [...by.entries()].map(([source, messages]) => {
+      const known = scanSources.find((s) => s.id === source);
+      return { source, messages, label: known?.label ?? source, canDisable: !!known };
+    });
+  }, [warnings, scanSources]);
+
+  // Collapse again when a new scan arrives, so the panel isn't left hanging
+  // open over a different set of warnings.
+  useEffect(() => setWarningsOpen(false), [scan_?.id]);
 
   return (
     <div className="app">
@@ -214,13 +248,53 @@ export default function App() {
       )}
       {error && <div className="banner error" role="alert">{error}</div>}
       {msg && <div className="banner info" role="status">{msg}</div>}
-      {!viewingSnapshot && scan_ && scan_.warnings?.length > 0 && (
-        <div
-          className="banner warning"
-          role="status"
-          title={scan_.warnings.map((warning) => `${warning.source}: ${warning.message}`).join("\n")}
-        >
-          Scan completed with {scan_.warnings.length} warning{scan_.warnings.length === 1 ? "" : "s"}. Some sources may be incomplete.
+      {!viewingSnapshot && warnings && warnings.length > 0 && (
+        <div className="banner warning warning-block" role="status">
+          <button
+            className="warning-summary"
+            onClick={() => setWarningsOpen((o) => !o)}
+            aria-expanded={warningsOpen}
+          >
+            <AlertTriangle size={15} />
+            <span>
+              Scan completed with {warnings.length} warning{warnings.length === 1 ? "" : "s"} from{" "}
+              {warningGroups.length} source{warningGroups.length === 1 ? "" : "s"}. Some sources may
+              be incomplete.
+            </span>
+            <ChevronDown size={14} className={`warning-caret ${warningsOpen ? "open" : ""}`} />
+          </button>
+
+          {warningsOpen && (
+            <div className="warning-detail">
+              {warningGroups.map((g) => (
+                <div key={g.source} className="warning-group">
+                  <div className="warning-group-head">
+                    <strong>{g.label}</strong>
+                    <span className="warning-count">{g.messages.length}</span>
+                    {g.canDisable && (
+                      <button
+                        className="link-btn"
+                        disabled={settingsSaving}
+                        title={`Stop scanning ${g.label}`}
+                        onClick={() => toggleSource(g.source)}
+                      >
+                        Turn off this source
+                      </button>
+                    )}
+                  </div>
+                  {g.messages.map((m, i) => (
+                    <pre key={i} className="warning-msg">
+                      {m}
+                    </pre>
+                  ))}
+                </div>
+              ))}
+              <p className="warning-foot">
+                Warnings usually mean a tool wasn't found, timed out, or exited with an error —
+                that source's items may be missing. Turning one off takes effect on your next scan.
+              </p>
+            </div>
+          )}
         </div>
       )}
       {viewingSnapshot && (

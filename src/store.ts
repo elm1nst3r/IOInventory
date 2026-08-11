@@ -103,6 +103,7 @@ interface State {
   setAllSources: (enabled: boolean) => Promise<void>;
   setRoots: (roots: string[]) => Promise<void>;
   setMcpAllowWrite: (allow: boolean) => Promise<void>;
+  setAutoUpdateCheck: (on: boolean) => Promise<void>;
   /** Shared write-through used by the three setters above. */
   persistSettings: (next: Settings) => Promise<void>;
 }
@@ -133,7 +134,13 @@ export const useStore = create<State>((set, get) => ({
   updateStatus: "idle",
   updateProgress: 0,
   updateError: null,
-  settings: { disabled_sources: [], roots: [], mcp_allow_write: false },
+  settings: {
+    disabled_sources: [],
+    roots: [],
+    mcp_allow_write: false,
+    // Matches the backend default; the real value arrives in `init`.
+    auto_update_check: true,
+  },
   scanSources: [],
   settingsSaving: false,
   appVersion: "",
@@ -186,15 +193,21 @@ export const useStore = create<State>((set, get) => ({
     try {
       const inventory = await api.scan();
       const graph = await api.getGraph();
-      set({
-        inventory,
-        graph,
-        liveInventory: inventory,
-        liveGraph: graph,
-        scanning: false,
-        enrichCache: {},
-        viewingSnapshot: null,
-      });
+      // A scan refreshes the live machine. If a snapshot is on screen it stays
+      // there — only the cached live copy behind it moves. That's what lets an
+      // install launched from a snapshot land without yanking the view away.
+      if (get().viewingSnapshot) {
+        set({ liveInventory: inventory, liveGraph: graph, scanning: false });
+      } else {
+        set({
+          inventory,
+          graph,
+          liveInventory: inventory,
+          liveGraph: graph,
+          scanning: false,
+          enrichCache: {},
+        });
+      }
     } catch (e) {
       set({ error: String(e), scanning: false });
     }
@@ -249,14 +262,7 @@ export const useStore = create<State>((set, get) => ({
 
   setItemTags: async (key, tags) => {
     await api.setItemTags(key, tags);
-    const inv = get().inventory;
-    if (inv) {
-      const items = inv.items.map((it: Item) =>
-        it.item_key === key ? { ...it, tags } : it,
-      );
-      const inventory = { ...inv, items };
-      set({ inventory, liveInventory: inventory });
-    }
+    patchItem(set, get, key, { tags });
     // If we removed the last item from the active view, drop the view.
     const view = get().activeView;
     if (view) {
@@ -306,6 +312,11 @@ export const useStore = create<State>((set, get) => ({
   },
 
   checkForUpdates: async (silent) => {
+    // The opt-out is enforced here rather than at the call site, so it covers
+    // any future automatic check too. An explicit press of "Check for updates"
+    // (silent === false) is a deliberate act and always runs — opting out of
+    // background checks isn't opting out of ever looking.
+    if (silent && !get().settings.auto_update_check) return;
     set({ updateStatus: "checking", updateError: null });
     try {
       const u = await check();
@@ -374,6 +385,10 @@ export const useStore = create<State>((set, get) => ({
     await get().persistSettings({ ...get().settings, mcp_allow_write });
   },
 
+  setAutoUpdateCheck: async (auto_update_check) => {
+    await get().persistSettings({ ...get().settings, auto_update_check });
+  },
+
   persistSettings: async (next: Settings) => {
     set({ settingsSaving: true, error: null });
     try {
@@ -400,13 +415,31 @@ export const useStore = create<State>((set, get) => ({
 
   saveNote: async (key, note, why) => {
     await api.setNote(key, note, why);
-    const inv = get().inventory;
-    if (inv) {
-      const items = inv.items.map((it: Item) =>
-        it.item_key === key ? { ...it, note, why } : it,
-      );
-      const inventory = { ...inv, items };
-      set({ inventory, liveInventory: inventory });
-    }
+    patchItem(set, get, key, { note, why });
   },
 }));
+
+/**
+ * Apply an optimistic edit to one item in the displayed inventory *and* in the
+ * cached live one, keeping the two separate: notes and tags are stored per
+ * item_key so they apply to both, but writing the displayed inventory straight
+ * into `liveInventory` would overwrite the live scan with a snapshot's items
+ * whenever a snapshot is on screen.
+ */
+function patchItem(
+  set: (partial: Partial<State>) => void,
+  get: () => State,
+  key: string,
+  patch: Partial<Item>,
+) {
+  const apply = (inv: Inventory | null): Inventory | null =>
+    inv
+      ? { ...inv, items: inv.items.map((it) => (it.item_key === key ? { ...it, ...patch } : it)) }
+      : inv;
+
+  const { inventory, liveInventory, viewingSnapshot } = get();
+  set({
+    inventory: apply(inventory),
+    liveInventory: viewingSnapshot ? apply(liveInventory) : apply(inventory),
+  });
+}

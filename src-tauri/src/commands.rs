@@ -155,6 +155,11 @@ pub fn get_roots(state: State<'_, AppState>) -> Vec<String> {
 pub fn set_roots(state: State<'_, AppState>, roots: Vec<String>) -> Result<(), String> {
     // Drop the settings guard before taking the db lock — `set_settings` takes
     // them the other way round, and holding both would invert the lock order.
+    let roots: Vec<String> = roots
+        .into_iter()
+        .map(|r| r.trim().to_string())
+        .filter(|r| !r.is_empty())
+        .collect();
     let next = {
         let mut guard = state.settings.lock().unwrap();
         guard.roots = roots;
@@ -260,18 +265,44 @@ pub async fn delete_snapshot(state: State<'_, AppState>, id: i64) -> Result<(), 
     db.delete_snapshot(id).map_err(|e| e.to_string())
 }
 
-/// Diff a snapshot (base) against the current inventory (target).
+/// Diff a snapshot (base) against another snapshot, or against the current
+/// inventory when `target_id` is omitted.
 #[tauri::command]
-pub async fn diff_snapshot(state: State<'_, AppState>, id: i64) -> Result<Diff, String> {
-    let (snap, current) = {
-        let db = state.db.lock().unwrap();
-        let snap = db.get_snapshot(id).map_err(|e| e.to_string())?.ok_or("snapshot not found")?;
-        let current = db.latest_inventory().map_err(|e| e.to_string())?.ok_or("no current scan to compare")?;
-        (snap, current)
+pub async fn diff_snapshot(
+    state: State<'_, AppState>,
+    id: i64,
+    target_id: Option<i64>,
+) -> Result<Diff, String> {
+    if Some(id) == target_id {
+        return Err("pick two different snapshots to compare".into());
+    }
+    let db = state.db.lock().unwrap();
+    let (base_meta, base_items) = db
+        .get_snapshot(id)
+        .map_err(|e| e.to_string())?
+        .ok_or("snapshot not found")?;
+    let (target_label, target_items) = match target_id {
+        Some(target_id) => {
+            let (meta, items) = db
+                .get_snapshot(target_id)
+                .map_err(|e| e.to_string())?
+                .ok_or("comparison snapshot not found")?;
+            (snapshot::label(&meta), items)
+        }
+        None => {
+            let current = db
+                .latest_inventory()
+                .map_err(|e| e.to_string())?
+                .ok_or("no current scan to compare")?;
+            ("Current scan".to_string(), current.items)
+        }
     };
-    let (meta, base_items) = snap;
-    let label = format!("{} · {}", meta.name, meta.created_at.chars().take(10).collect::<String>());
-    Ok(snapshot::diff(&base_items, &current.items, &label, "Current scan"))
+    Ok(snapshot::diff(
+        &base_items,
+        &target_items,
+        &snapshot::label(&base_meta),
+        &target_label,
+    ))
 }
 
 /// Export a snapshot (by id) or the current inventory (id = None) as a
