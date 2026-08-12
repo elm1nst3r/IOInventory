@@ -8,7 +8,7 @@ default-members = ["."]
 
 [package]
 name = "agent-ledger"
-version = "0.12.1"
+version = "0.13.0"
 description = "IO Inventory — developer & AI environment inventory"
 authors = ["elm1nst3r"]
 edition = "2021"
