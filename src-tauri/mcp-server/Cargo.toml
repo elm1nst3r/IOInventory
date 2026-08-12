@@ -1,6 +1,6 @@
 [package]
 name = "ioinv-mcp"
-version = "0.13.0"
+version = "0.14.0"
 description = "IO Inventory MCP server — exposes the machine inventory to AI agents over stdio"
 edition = "2021"
 
