@@ -127,8 +127,12 @@ export default function SettingsPanel() {
           if (e.isIntersecting) visible.add(e.target.id);
           else visible.delete(e.target.id);
         }
-        const first = SECTIONS.find((s) => visible.has(s.id));
-        if (first) setActiveSection(first.id);
+        // Furthest-along wins, not first. The band spans the top third, so
+        // several tall sections can be in it at once — and the last section
+        // can never reach the top of a scrolled-to-bottom pane, which left
+        // "Updates" permanently highlighting "MCP server".
+        const current = [...SECTIONS].reverse().find((s) => visible.has(s.id));
+        if (current) setActiveSection(current.id);
       },
       { root, rootMargin: "0px 0px -68% 0px", threshold: 0 },
     );

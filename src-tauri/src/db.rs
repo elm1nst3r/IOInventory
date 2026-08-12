@@ -277,20 +277,25 @@ impl Db {
     }
 
     /// Replace all tags for an item with the given set.
-    pub fn set_item_tags(&self, item_key: &str, tags: &[String]) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM tags WHERE item_key = ?1", params![item_key])?;
+    ///
+    /// Wrapped in a transaction: this clears before it inserts, so without one
+    /// a failure part-way through would drop the old tags and not write the new
+    /// ones. Tags are the only data here a re-scan can't reproduce.
+    pub fn set_item_tags(&mut self, item_key: &str, tags: &[String]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM tags WHERE item_key = ?1", params![item_key])?;
         let mut seen = std::collections::HashSet::new();
         for tag in tags {
             let tag = tag.trim();
             if tag.is_empty() || !seen.insert(tag.to_lowercase()) {
                 continue;
             }
-            self.conn.execute(
+            tx.execute(
                 "INSERT OR IGNORE INTO tags (item_key, tag) VALUES (?1, ?2)",
                 params![item_key, tag],
             )?;
         }
+        tx.commit()?;
         Ok(())
     }
 

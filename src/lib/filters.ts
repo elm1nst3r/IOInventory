@@ -43,18 +43,6 @@ export function passesFilters(item: Item, active: Set<string>): boolean {
   return false;
 }
 
-/** Same test, from a graph item node's `meta` payload. */
-export function metaPasses(meta: any, active: Set<string>): boolean {
-  if (active.size === 0) return true;
-  const m = meta?.metadata ?? {};
-  for (const k of active) {
-    if (k === "outdated" && m.outdated) return true;
-    if (k === "deprecated" && m.deprecated) return true;
-    if (k === "noted" && meta?.why) return true;
-  }
-  return false;
-}
-
 export function countMatching(items: Item[], key: FilterKey): number {
   return items.reduce((n, i) => n + (itemHasFlag(i, key) ? 1 : 0), 0);
 }
@@ -63,11 +51,6 @@ export function countMatching(items: Item[], key: FilterKey): number {
 
 export function itemInView(item: Item, view: string | null): boolean {
   return !view || !!item.tags?.includes(view);
-}
-
-/** View test from a graph item node's `meta` payload. */
-export function metaInView(meta: any, view: string | null): boolean {
-  return !view || (Array.isArray(meta?.tags) && meta.tags.includes(view));
 }
 
 /** Distinct tags across the inventory with item counts, sorted by name. */

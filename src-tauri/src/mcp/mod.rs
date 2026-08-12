@@ -337,12 +337,15 @@ mod tests {
 
     /// A server backed by a throwaway ledger. Tests run in parallel in one
     /// process, so the filename has to be unique per call, not per process.
+    ///
+    /// A wall-clock stamp isn't enough: `SystemTime` is only microsecond-
+    /// resolution on macOS, two tests starting in the same tick collided on one
+    /// path, and the loser failed with "database is locked". A counter can't
+    /// collide.
     fn test_server() -> Server {
-        let stamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("io-inv-mcp-{}-{stamp}.sqlite", std::process::id()));
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let seq = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("io-inv-mcp-{}-{seq}.sqlite", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let mut db = Db::open(&path).unwrap();
         let items = vec![

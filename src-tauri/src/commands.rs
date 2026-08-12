@@ -118,7 +118,7 @@ pub async fn set_item_tags(
     item_key: String,
     tags: Vec<String>,
 ) -> Result<(), String> {
-    let db = state.db.lock().unwrap();
+    let mut db = state.db.lock().unwrap();
     db.set_item_tags(&item_key, &tags).map_err(|e| e.to_string())
 }
 

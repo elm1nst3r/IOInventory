@@ -17,6 +17,45 @@ use commands::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 
+/// The version lives in four manifests and a release tags whatever they say.
+/// They drifted once already (the MCP crate was left a minor behind), which
+/// ships an app whose sidecar reports the wrong version — so assert it.
+#[cfg(test)]
+mod version_consistency {
+    /// First `"version": "x"` / `version = "x"` in a manifest.
+    fn version_in(manifest: &str) -> &str {
+        for key in ["\"version\":", "version ="] {
+            if let Some(rest) = manifest.split_once(key).map(|(_, r)| r) {
+                if let Some(start) = rest.find('"') {
+                    let rest = &rest[start + 1..];
+                    if let Some(end) = rest.find('"') {
+                        return &rest[..end];
+                    }
+                }
+            }
+        }
+        panic!("no version found in manifest");
+    }
+
+    #[test]
+    fn all_manifests_agree() {
+        let crate_version = env!("CARGO_PKG_VERSION");
+        for (label, manifest) in [
+            ("package.json", include_str!("../../package.json")),
+            ("tauri.conf.json", include_str!("../tauri.conf.json")),
+            ("mcp-server/Cargo.toml", include_str!("../mcp-server/Cargo.toml")),
+        ] {
+            assert_eq!(
+                version_in(manifest),
+                crate_version,
+                "{label} is out of step with src-tauri/Cargo.toml ({crate_version}); \
+                 bump all four before cutting a release"
+            );
+        }
+        println!("all_manifests_agree OK — v{crate_version}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
