@@ -6,7 +6,6 @@ import {
   Wrench,
   History,
   FileDown,
-  Search,
   Sun,
   Moon,
   ChevronDown,
@@ -22,6 +21,7 @@ import GraphView from "./graph/GraphView";
 import ListView from "./views/ListView";
 import DetailPanel from "./panels/DetailPanel";
 import FilterBar from "./panels/FilterBar";
+import SearchBox from "./panels/SearchBox";
 import "./App.css";
 
 const CleanupPanel = lazy(() => import("./panels/CleanupPanel"));
@@ -36,13 +36,11 @@ export default function App() {
     loading,
     error,
     tab,
-    search,
     theme,
     viewingSnapshot,
     init,
     scan,
     setTab,
-    setSearch,
     toggleTheme,
     exitSnapshot,
     updateAvailable,
@@ -154,17 +152,7 @@ export default function App() {
           </button>
         </nav>
 
-        {tab === "list" && (
-          <div className="searchbox">
-            <Search size={14} />
-            <input
-              aria-label="Search inventory"
-              placeholder="Search packages, repos, skills…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        )}
+        {(tab === "graph" || tab === "list") && <SearchBox />}
 
         <div className="topbar-right">
           {scan_ && !viewingSnapshot && (

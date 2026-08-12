@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { useStore } from "../store";
 import { formatBytes } from "../lib/api";
 import { passesFilters, itemInView, isDependency } from "../lib/filters";
+import { matchesQuery } from "../lib/search";
 import { collectorLabel } from "../lib/labels";
 import { DOMAIN_LABELS, type Domain, type Item } from "../lib/types";
 
@@ -80,17 +81,7 @@ export default function ListView() {
       if (!showDependencies && !q && isDependency(i)) return false;
       if (!itemInView(i, activeView)) return false;
       if (!passesFilters(i, filters)) return false;
-      if (!q) return true;
-      return (
-        i.name.toLowerCase().includes(q) ||
-        i.collector.toLowerCase().includes(q) ||
-        (i.version ?? "").toLowerCase().includes(q) ||
-        (i.source_path ?? "").toLowerCase().includes(q) ||
-        (i.why ?? "").toLowerCase().includes(q) ||
-        (i.tags ?? []).some((tag) => tag.toLowerCase().includes(q)) ||
-        String(i.metadata?.description ?? "").toLowerCase().includes(q) ||
-        (i.metadata?.stacks ?? []).some((stack: string) => stack.toLowerCase().includes(q))
-      );
+      return !q || matchesQuery(i, q);
     });
   }, [inventory, search, filters, activeView, showDependencies]);
 

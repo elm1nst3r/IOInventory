@@ -24,6 +24,7 @@ import { useStore } from "../store";
 import { accentById } from "../lib/appearance";
 import { formatBytes } from "../lib/api";
 import { passesFilters, itemInView, isDependency } from "../lib/filters";
+import { matchesQuery } from "../lib/search";
 import type { Graph as GraphData, GraphNode } from "../lib/types";
 
 const SIZES: Record<string, { w: number; h: number }> = {
@@ -165,6 +166,7 @@ export default function GraphView() {
   const filters = useStore((s) => s.filters);
   const activeView = useStore((s) => s.activeView);
   const inventory = useStore((s) => s.inventory);
+  const search = useStore((s) => s.search);
   const showDependencies = useStore((s) => s.showDependencies);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -200,7 +202,11 @@ export default function GraphView() {
     }
     // "Restricted" means either quick-filters or a saved view is active; in
     // that mode we show every matching item and prune empty collectors/domains.
-    const filtersActive = filters.size > 0 || activeView !== null;
+    // A query narrows the graph the same way a filter does: matching items are
+    // shown wherever they live and empty branches are pruned, so you can see
+    // what matched without hunting for it behind a collapsed collector.
+    const q = search.trim().toLowerCase();
+    const filtersActive = filters.size > 0 || activeView !== null || q.length > 0;
     // Item nodes carry no dependency flag of their own — the live inventory is
     // the source of truth, same as for tags and quick-filters.
     const depKeys = new Set(
@@ -216,9 +222,10 @@ export default function GraphView() {
         (inventory?.items ?? [])
           .filter(
             (i) =>
-              (showDependencies || !isDependency(i)) &&
+              (showDependencies || q.length > 0 || !isDependency(i)) &&
               passesFilters(i, filters) &&
-              itemInView(i, activeView),
+              itemInView(i, activeView) &&
+              (!q || matchesQuery(i, q)),
           )
           .map((i) => i.item_key),
       );
@@ -318,7 +325,7 @@ export default function GraphView() {
     return () => {
       cancelled = true;
     };
-  }, [graph, expanded, selectedKey, collectorsWithItems, layout, filters, activeView, inventory, showDependencies]);
+  }, [graph, expanded, selectedKey, collectorsWithItems, layout, filters, activeView, inventory, showDependencies, search]);
 
   const onNodeClick = useCallback(
     (_: any, node: Node) => {
