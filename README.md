@@ -188,8 +188,9 @@ cd src-tauri && cargo test scan_smoke -- --nocapture
 
 - [x] **Snapshots & import** — save/import states, view them read-only, and diff against the current scan
 - [x] **Install from the app** — per-item install plus bulk-install missing items from a diff
-- [ ] **Fix the logo & app icon** — polish the blueprint icon and its packaging across sizes/platforms
-- [ ] Diff two snapshots directly (not just snapshot ↔ current); bulk-uninstall from a diff
+- [x] **Fix the logo & app icon** — polish the blueprint icon and its packaging across sizes/platforms
+- [x] **Diff two snapshots directly** — compare any two saved snapshots, not just snapshot ↔ current
+- [ ] Bulk-uninstall from a diff
 - [ ] Agent-driven self-updates — a CLI + Claude Code hook that appends to the ledger automatically
 - [ ] Background / scheduled scans
 - [ ] Windows package managers (winget / scoop / choco) + code signing
