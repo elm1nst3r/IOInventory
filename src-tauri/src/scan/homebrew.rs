@@ -54,6 +54,11 @@ pub async fn collect() -> Vec<Item> {
         }
     }
 
+    // Which formulae are transitive rather than chosen is worked out in
+    // `outdated::mark`, which already has the `brew info --json=v2 --installed`
+    // payload that answers it — a separate `brew leaves` call costs ~1s and
+    // tells us the same thing.
+
     items
 }
 

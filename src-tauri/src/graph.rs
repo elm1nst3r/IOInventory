@@ -14,7 +14,10 @@ pub fn build(inv: &Inventory) -> Graph {
         parent: None,
         count: inv.items.len() as i64,
         size_bytes: None,
-        meta: serde_json::json!({ "os": inv.scan.os }),
+        meta: serde_json::json!({
+            "os": inv.scan.os,
+            "deps": inv.items.iter().filter(|i| is_dependency(i)).count() as i64,
+        }),
     });
 
     // Group items: domain -> collector -> item indices.
@@ -52,7 +55,9 @@ pub fn build(inv: &Inventory) -> Graph {
             parent: Some(root_id.clone()),
             count: domain_count,
             size_bytes: domain_size,
-            meta: serde_json::json!({}),
+            meta: serde_json::json!({
+                "deps": count_deps(inv, collectors.values().flatten().copied()),
+            }),
         });
         edges.push(edge(&root_id, &domain_id));
 
@@ -66,7 +71,10 @@ pub fn build(inv: &Inventory) -> Graph {
                 parent: Some(domain_id.clone()),
                 count: idxs.len() as i64,
                 size_bytes: csize,
-                meta: serde_json::json!({ "collector": collector }),
+                meta: serde_json::json!({
+                    "collector": collector,
+                    "deps": count_deps(inv, idxs.iter().copied()),
+                }),
             });
             edges.push(edge(&domain_id, &collector_id));
 
@@ -95,6 +103,21 @@ pub fn build(inv: &Inventory) -> Graph {
     }
 
     Graph { nodes, edges }
+}
+
+/// An item pulled in by another package rather than chosen by the user.
+/// Collectors that can't tell leave the flag off, and those count as chosen.
+pub fn is_dependency(item: &crate::model::Item) -> bool {
+    item.metadata
+        .get("dependency")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+}
+
+/// How many of these items are transitive dependencies — lets the UI report
+/// "15 items · 91 deps" without re-deriving it from the inventory.
+fn count_deps(inv: &Inventory, idxs: impl Iterator<Item = usize>) -> i64 {
+    idxs.filter(|&i| is_dependency(&inv.items[i])).count() as i64
 }
 
 fn sum_size(inv: &Inventory, idxs: impl Iterator<Item = usize>) -> Option<i64> {

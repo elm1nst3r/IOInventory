@@ -6,8 +6,8 @@ use std::collections::{HashMap, HashSet};
 /// Homebrew + npm) and flag deprecated Homebrew formulae. Annotates items with
 /// `outdated`/`latest`/`deprecated` in metadata.
 pub async fn mark(items: &mut [Item]) {
-    let (brew, npm, deprecated) =
-        tokio::join!(brew_outdated(), npm_outdated(), brew_deprecated());
+    let (brew, npm, installed) =
+        tokio::join!(brew_outdated(), npm_outdated(), brew_installed_facts());
 
     for it in items.iter_mut() {
         let latest = match it.collector.as_str() {
@@ -21,21 +21,53 @@ pub async fn mark(items: &mut [Item]) {
                 obj.insert("latest".into(), serde_json::json!(latest));
             }
         }
-        if it.collector == "homebrew" && deprecated.contains(&it.name) {
-            if let Some(obj) = it.metadata.as_object_mut() {
-                obj.insert("deprecated".into(), serde_json::json!(true));
+        if it.collector == "homebrew" {
+            if installed.deprecated.contains(&it.name) {
+                if let Some(obj) = it.metadata.as_object_mut() {
+                    obj.insert("deprecated".into(), serde_json::json!(true));
+                }
+            }
+            // Only claim a formula is/isn't a dependency when the graph was
+            // readable and actually covered it; an empty set would mark
+            // everything top-level, and an unlisted formula gets no verdict.
+            if let Some(depended_on) = &installed.depended_on {
+                if installed.known.contains(&it.name) {
+                    if let Some(obj) = it.metadata.as_object_mut() {
+                        obj.insert(
+                            "dependency".into(),
+                            serde_json::json!(depended_on.contains(&it.name)),
+                        );
+                    }
+                }
             }
         }
     }
 }
 
-/// Names of installed Homebrew formulae that are deprecated or disabled.
-/// A single `brew info --json=v2 --installed` call carries the flags for all
-/// installed formulae. Bounded by a timeout so it can't dominate the scan.
-async fn brew_deprecated() -> HashSet<String> {
-    let mut set = HashSet::new();
+/// What one `brew info --json=v2 --installed` payload tells us about the
+/// installed formulae.
+#[derive(Default)]
+struct InstalledFacts {
+    /// Formulae flagged deprecated or disabled upstream.
+    deprecated: HashSet<String>,
+    /// Formulae that some other installed formula pulls in. The complement is
+    /// what `brew leaves` reports — the set the user actually asked for — so
+    /// this saves a second ~1s brew invocation. `None` if the payload was
+    /// unreadable, which must not be confused with "nothing is a dependency".
+    depended_on: Option<HashSet<String>>,
+    /// Formulae the payload actually described. `brew info` silently omits ones
+    /// it can't resolve (a formula from a tap that's since gone, say), and
+    /// those get no verdict rather than a wrong one.
+    known: HashSet<String>,
+}
+
+/// Deprecation flags and the runtime-dependency graph for every installed
+/// formula, from a single `brew info --json=v2 --installed` call. Bounded by a
+/// timeout so it can't dominate the scan.
+async fn brew_installed_facts() -> InstalledFacts {
+    let mut facts = InstalledFacts::default();
     if !util::is_available("brew") {
-        return set;
+        return facts;
     }
     let out = match util::run_with(
         "brew",
@@ -45,23 +77,43 @@ async fn brew_deprecated() -> HashSet<String> {
     .await
     {
         Some(o) => o,
-        None => return set,
+        None => return facts,
     };
     let Ok(v) = serde_json::from_str::<serde_json::Value>(&out) else {
-        return set;
+        return facts;
     };
     if let Some(arr) = v.get("formulae").and_then(|f| f.as_array()) {
+        let mut depended_on = HashSet::new();
         for f in arr {
             let deprecated = f.get("deprecated").and_then(|d| d.as_bool()).unwrap_or(false);
             let disabled = f.get("disabled").and_then(|d| d.as_bool()).unwrap_or(false);
-            if deprecated || disabled {
-                if let Some(name) = f.get("name").and_then(|n| n.as_str()) {
-                    set.insert(name.to_string());
+            if let Some(name) = f.get("name").and_then(|n| n.as_str()) {
+                facts.known.insert(name.to_string());
+                if deprecated || disabled {
+                    facts.deprecated.insert(name.to_string());
+                }
+            }
+            // Each installed keg lists what it actually needs at runtime; the
+            // union is every formula that's here because something else wanted
+            // it. Tapped formulae appear as "tap/name", so key on the last part.
+            for inst in f.get("installed").and_then(|i| i.as_array()).into_iter().flatten() {
+                for rd in inst
+                    .get("runtime_dependencies")
+                    .and_then(|r| r.as_array())
+                    .into_iter()
+                    .flatten()
+                {
+                    if let Some(full) = rd.get("full_name").and_then(|n| n.as_str()) {
+                        depended_on.insert(full.rsplit('/').next().unwrap_or(full).to_string());
+                    }
                 }
             }
         }
+        if !arr.is_empty() {
+            facts.depended_on = Some(depended_on);
+        }
     }
-    set
+    facts
 }
 
 /// name -> latest version, for outdated brew formulae and casks.

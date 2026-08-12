@@ -1,5 +1,29 @@
 use super::util;
 use crate::model::{Domain, Item};
+use std::collections::HashSet;
+
+/// Packages no other installed package depends on — what the user asked for.
+/// `None` when the query is unavailable, which is not the same as "none".
+/// Names are lowercased because pip normalises inconsistently across versions.
+async fn top_level_packages(pip: &str) -> Option<HashSet<String>> {
+    let out = util::run_with(
+        pip,
+        &["list", "--not-required", "--format=json"],
+        std::time::Duration::from_secs(10),
+    )
+    .await?;
+    let arr: Vec<serde_json::Value> = serde_json::from_str(&out).ok()?;
+    let set: HashSet<String> = arr
+        .iter()
+        .filter_map(|p| p.get("name").and_then(|v| v.as_str()))
+        .map(|n| n.to_ascii_lowercase())
+        .collect();
+    if set.is_empty() {
+        None
+    } else {
+        Some(set)
+    }
+}
 
 /// Global pip packages and pipx-managed applications.
 pub async fn collect() -> Vec<Item> {
@@ -13,7 +37,13 @@ pub async fn collect() -> Vec<Item> {
         None
     };
     if let Some(pip) = pip {
-        if let Some(out) = util::run(pip, &["list", "--format=json"]).await {
+        // The full list and the top-level-only list, concurrently — the second
+        // is what separates "I installed this" from "something needed it".
+        let (all, top_level) = tokio::join!(
+            util::run(pip, &["list", "--format=json"]),
+            top_level_packages(pip),
+        );
+        if let Some(out) = all {
             if let Ok(serde_json::Value::Array(arr)) = serde_json::from_str(&out) {
                 for pkg in arr {
                     let name = pkg.get("name").and_then(|v| v.as_str()).unwrap_or("");
@@ -24,6 +54,10 @@ pub async fn collect() -> Vec<Item> {
                     let mut item = Item::new(Domain::PackageManager, "pip", name);
                     if let Some(v) = pkg.get("version").and_then(|v| v.as_str()) {
                         item = item.version(v);
+                    }
+                    if let Some(top) = &top_level {
+                        let dependency = !top.contains(&name.to_ascii_lowercase());
+                        item = item.meta(serde_json::json!({ "dependency": dependency }));
                     }
                     items.push(item);
                 }

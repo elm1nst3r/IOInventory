@@ -23,7 +23,7 @@ import {
 import { useStore } from "../store";
 import { accentById } from "../lib/appearance";
 import { formatBytes } from "../lib/api";
-import { passesFilters, itemInView } from "../lib/filters";
+import { passesFilters, itemInView, isDependency } from "../lib/filters";
 import type { Graph as GraphData, GraphNode } from "../lib/types";
 
 const SIZES: Record<string, { w: number; h: number }> = {
@@ -55,6 +55,7 @@ function Cell({ data }: NodeProps) {
   const expandable = data.expandable as boolean;
   const expanded = data.expanded as boolean;
   const radial = data.radial as boolean;
+  const hiddenDeps = (data.hiddenDeps as number) ?? 0;
   const outdated = Boolean((n.meta as any)?.metadata?.outdated);
   const Icon = iconFor(n);
 
@@ -73,9 +74,10 @@ function Cell({ data }: NodeProps) {
         {Icon && <Icon size={15} className="gnode-icon" />}
         <div className="gnode-text">
           <div className="gnode-label">{n.label}</div>
-          {n.kind !== "item" && n.count > 0 && (
+          {n.kind !== "item" && n.count - hiddenDeps > 0 && (
             <div className="gnode-sub">
-              {n.count} {n.count === 1 ? "item" : "items"}
+              {n.count - hiddenDeps} {n.count - hiddenDeps === 1 ? "item" : "items"}
+              {hiddenDeps > 0 ? ` · ${hiddenDeps} deps` : ""}
               {n.size_bytes ? ` · ${formatBytes(n.size_bytes)}` : ""}
             </div>
           )}
@@ -163,17 +165,24 @@ export default function GraphView() {
   const filters = useStore((s) => s.filters);
   const activeView = useStore((s) => s.activeView);
   const inventory = useStore((s) => s.inventory);
+  const showDependencies = useStore((s) => s.showDependencies);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
   const collectorsWithItems = useMemo(() => {
     const s = new Set<string>();
+    const deps = new Set(
+      (inventory?.items ?? []).filter(isDependency).map((i) => i.item_key),
+    );
     graph?.nodes.forEach((n) => {
-      if (n.kind === "item" && n.parent) s.add(n.parent);
+      // Don't offer to expand a collector whose every item is hidden.
+      if (n.kind !== "item" || !n.parent) return;
+      if (!showDependencies && deps.has(n.id)) return;
+      s.add(n.parent);
     });
     return s;
-  }, [graph]);
+  }, [graph, inventory, showDependencies]);
 
   const toggle = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -192,6 +201,11 @@ export default function GraphView() {
     // "Restricted" means either quick-filters or a saved view is active; in
     // that mode we show every matching item and prune empty collectors/domains.
     const filtersActive = filters.size > 0 || activeView !== null;
+    // Item nodes carry no dependency flag of their own — the live inventory is
+    // the source of truth, same as for tags and quick-filters.
+    const depKeys = new Set(
+      (inventory?.items ?? []).filter(isDependency).map((i) => i.item_key),
+    );
     const matchItems = new Set<string>();
     const matchCollectors = new Set<string>();
     const matchDomains = new Set<string>();
@@ -200,7 +214,12 @@ export default function GraphView() {
       // rather than graph-node metadata baked in at scan time.
       const matchKeys = new Set(
         (inventory?.items ?? [])
-          .filter((i) => passesFilters(i, filters) && itemInView(i, activeView))
+          .filter(
+            (i) =>
+              (showDependencies || !isDependency(i)) &&
+              passesFilters(i, filters) &&
+              itemInView(i, activeView),
+          )
           .map((i) => i.item_key),
       );
       for (const n of graph.nodes) {
@@ -223,7 +242,10 @@ export default function GraphView() {
         if (n.kind === "domain") return matchDomains.has(n.id);
         return true; // root
       }
-      if (n.kind === "item") return n.parent && expanded.has(n.parent);
+      if (n.kind === "item") {
+        if (!showDependencies && depKeys.has(n.id)) return false;
+        return n.parent && expanded.has(n.parent);
+      }
       return true;
     });
     const visibleIds = new Set(visible.map((n) => n.id));
@@ -243,6 +265,7 @@ export default function GraphView() {
           position: radial ? { x: p.x - size.w / 2, y: p.y - size.h / 2 } : p,
           data: {
             node: n,
+            hiddenDeps: showDependencies ? 0 : Number((n.meta as any)?.deps ?? 0),
             selected: selectedKey === n.id,
             expandable: n.kind === "collector" && collectorsWithItems.has(n.id),
             expanded: expanded.has(n.id),
@@ -295,7 +318,7 @@ export default function GraphView() {
     return () => {
       cancelled = true;
     };
-  }, [graph, expanded, selectedKey, collectorsWithItems, layout, filters, activeView, inventory]);
+  }, [graph, expanded, selectedKey, collectorsWithItems, layout, filters, activeView, inventory, showDependencies]);
 
   const onNodeClick = useCallback(
     (_: any, node: Node) => {

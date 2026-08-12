@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useStore } from "../store";
 import { formatBytes } from "../lib/api";
-import { passesFilters, itemInView } from "../lib/filters";
+import { passesFilters, itemInView, isDependency } from "../lib/filters";
 import { collectorLabel } from "../lib/labels";
 import { DOMAIN_LABELS, type Domain, type Item } from "../lib/types";
 
@@ -52,6 +52,7 @@ export default function ListView() {
   const activeView = useStore((s) => s.activeView);
   const select = useStore((s) => s.select);
   const selectedKey = useStore((s) => s.selectedKey);
+  const showDependencies = useStore((s) => s.showDependencies);
 
   const [cats, setCats] = useState<Set<string>>(new Set()); // empty = all
   const [sort, setSort] = useState<Sort>("name-asc");
@@ -72,6 +73,11 @@ export default function ListView() {
     if (!inventory) return [];
     const q = search.trim().toLowerCase();
     return inventory.items.filter((i) => {
+      // Most of Homebrew and pip is transitive; hiding it by default is what
+      // makes the list show what you actually installed. A search still
+      // reaches dependencies — you shouldn't have to know the distinction to
+      // find something by name.
+      if (!showDependencies && !q && isDependency(i)) return false;
       if (!itemInView(i, activeView)) return false;
       if (!passesFilters(i, filters)) return false;
       if (!q) return true;
@@ -86,7 +92,7 @@ export default function ListView() {
         (i.metadata?.stacks ?? []).some((stack: string) => stack.toLowerCase().includes(q))
       );
     });
-  }, [inventory, search, filters, activeView]);
+  }, [inventory, search, filters, activeView, showDependencies]);
 
   // Collector → count + domain, for the multi-select menu (grouped by domain).
   const menu = useMemo(() => {
@@ -142,6 +148,20 @@ export default function ListView() {
       return { domain, byCollector, count: domItems.length };
     }).filter((g) => g.count > 0);
   }, [filtered, cats]);
+
+  // Dependencies suppressed in the current view, per collector, so a header can
+  // say "15 · 91 deps hidden" instead of silently under-reporting the total.
+  const hiddenDeps = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!inventory || showDependencies) return m;
+    if (search.trim()) return m; // a search reaches deps, so none are hidden
+    for (const i of inventory.items) {
+      if (!isDependency(i)) continue;
+      if (!itemInView(i, activeView) || !passesFilters(i, filters)) continue;
+      m.set(i.collector, (m.get(i.collector) ?? 0) + 1);
+    }
+    return m;
+  }, [inventory, showDependencies, search, activeView, filters]);
 
   if (!inventory) {
     return <div className="empty-hint">No scan yet — hit “Scan” to map your machine.</div>;
@@ -247,6 +267,9 @@ export default function ListView() {
           <section key={s.collector} className="list-domain">
             <h3>
               {collectorLabel(s.collector)} <span className="count-pill">{s.items.length}</span>
+              {!showDependencies && hiddenDeps.get(s.collector) ? (
+                <span className="lc-deps">{hiddenDeps.get(s.collector)} deps hidden</span>
+              ) : null}
             </h3>
             <div className="list-grid">{s.items.map(chip)}</div>
           </section>
@@ -261,6 +284,9 @@ export default function ListView() {
               <div key={collector} className="list-collector">
                 <div className="list-collector-head">
                   {collectorLabel(collector)} · {items.length}
+                  {!showDependencies && hiddenDeps.get(collector) ? (
+                    <span className="lc-deps"> · {hiddenDeps.get(collector)} deps hidden</span>
+                  ) : null}
                 </div>
                 <div className="list-grid">{items.map(chip)}</div>
               </div>

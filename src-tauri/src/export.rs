@@ -48,9 +48,17 @@ pub fn to_agent_map(inv: &Inventory) -> String {
             by_collector.entry(it.collector.as_str()).or_default().push(*it);
         }
         for (collector, list) in by_collector {
+            // Most of Homebrew and pip is transitive. Listing all of it buries
+            // the handful of things that were actually chosen, so dependencies
+            // are counted rather than enumerated — anything annotated still
+            // gets its line, since a note means the user cared about it.
+            let (chosen, deps): (Vec<&crate::model::Item>, Vec<&crate::model::Item>) = list
+                .iter()
+                .copied()
+                .partition(|it| !crate::graph::is_dependency(it) || has_annotation(it));
             let _ = writeln!(out, "### {} ({})", collector, list.len());
             let _ = writeln!(out);
-            for it in list {
+            for it in &chosen {
                 let ver = it.version.as_deref().map(|v| format!(" `{v}`")).unwrap_or_default();
                 let note = it
                     .why
@@ -60,10 +68,25 @@ pub fn to_agent_map(inv: &Inventory) -> String {
                     .unwrap_or_default();
                 let _ = writeln!(out, "- **{}**{}{}{}", it.name, ver, note, tag_suffix(it));
             }
+            if !deps.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "- _…plus {} pulled in as dependencies._",
+                    deps.len()
+                );
+            }
             let _ = writeln!(out);
         }
     }
     out
+}
+
+/// Whether the user has said anything about this item — a note or a tag. Enough
+/// to keep it in the ledger even if it's only here as a dependency.
+fn has_annotation(it: &crate::model::Item) -> bool {
+    !it.tags.is_empty()
+        || it.why.as_deref().is_some_and(|s| !s.is_empty())
+        || it.note.as_deref().is_some_and(|s| !s.is_empty())
 }
 
 /// Format an item's tags as a trailing ` _[a, b]_` marker.

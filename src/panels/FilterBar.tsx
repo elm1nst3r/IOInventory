@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SlidersHorizontal, X, Bookmark, ChevronDown } from "lucide-react";
 import { useStore } from "../store";
-import { FILTERS, countMatching, allTags } from "../lib/filters";
+import { FILTERS, countMatching, allTags, countDependencies } from "../lib/filters";
 
 export default function FilterBar() {
   const inventory = useStore((s) => s.inventory);
@@ -10,6 +10,8 @@ export default function FilterBar() {
   const clearFilters = useStore((s) => s.clearFilters);
   const activeView = useStore((s) => s.activeView);
   const setView = useStore((s) => s.setView);
+  const showDependencies = useStore((s) => s.showDependencies);
+  const toggleDependencies = useStore((s) => s.toggleDependencies);
 
   const [open, setOpen] = useState(false);
   const ddRef = useRef<HTMLDivElement>(null);
@@ -24,6 +26,10 @@ export default function FilterBar() {
   }, [open]);
 
   const tags = useMemo(() => (inventory ? allTags(inventory.items) : []), [inventory]);
+  const depCount = useMemo(
+    () => (inventory ? countDependencies(inventory.items) : 0),
+    [inventory],
+  );
 
   if (!inventory) return null;
 
@@ -32,8 +38,8 @@ export default function FilterBar() {
     count: countMatching(inventory.items, f.key),
   })).filter((f) => f.count > 0 || filters.has(f.key));
 
-  // Nothing to show at all (no tags, no matchable quick filters).
-  if (chips.length === 0 && tags.length === 0) return null;
+  // Nothing to show at all (no tags, no matchable quick filters, no deps).
+  if (chips.length === 0 && tags.length === 0 && depCount === 0) return null;
 
   return (
     <div className="filterbar">
@@ -97,6 +103,22 @@ export default function FilterBar() {
             </button>
           ))}
         </>
+      )}
+
+      {depCount > 0 && (
+        <button
+          className={`fb-chip fb-deps ${showDependencies ? "active" : ""}`}
+          onClick={toggleDependencies}
+          aria-pressed={showDependencies}
+          title={
+            showDependencies
+              ? "Hide packages that were pulled in by something else"
+              : "Show packages that were pulled in by something else"
+          }
+        >
+          {showDependencies ? "Hide dependencies" : "Dependencies"}
+          <span className="fb-count">{depCount}</span>
+        </button>
       )}
 
       {(filters.size > 0 || activeView) && (

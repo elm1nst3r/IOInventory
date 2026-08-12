@@ -76,6 +76,7 @@ pub fn list(allow_write: bool) -> Vec<Value> {
                 "collector": { "type": "string", "description": "Restrict to one collector, e.g. homebrew, npm, pip, cargo, gem, ollama, docker-image, git-repo, claude-skill, mcp-server. Use list_collectors to see what this machine has." },
                 "tag": { "type": "string", "description": "Only items carrying this user tag." },
                 "outdated": { "type": "boolean", "description": "true = only packages with a newer version available." },
+                "top_level": { "type": "boolean", "description": "true = only packages the user chose to install, excluding the ones pulled in as dependencies (most of Homebrew and pip). Usually what you want when asking 'what is installed here'." },
                 "has_note": { "type": "boolean", "description": "true = only items the user has annotated." },
                 "min_size_bytes": { "type": "integer", "description": "Only items at least this large on disk. Useful for finding what's worth removing." },
                 "sort": { "type": "string", "enum": ["name", "size"], "description": "Default 'name'. 'size' sorts largest first." },
@@ -413,6 +414,9 @@ fn item_line(it: &Item) -> String {
     if meta_bool(it, "deprecated") {
         parts.push("DEPRECATED".into());
     }
+    if crate::graph::is_dependency(it) {
+        parts.push("dep".into());
+    }
     if !it.tags.is_empty() {
         parts.push(it.tags.iter().map(|t| format!("#{t}")).collect::<Vec<_>>().join(" "));
     }
@@ -474,6 +478,17 @@ fn summary_text(inv: &Inventory) -> String {
         out.push_str(&format!("- {d}: {n}\n"));
     }
 
+    let deps = inv.items.iter().filter(|i| crate::graph::is_dependency(i)).count();
+    if deps > 0 {
+        out.push_str(&format!(
+            "\n{} of these were pulled in as dependencies; {} were chosen. \
+             Pass `top_level: true` to search_items for just the latter — that's \
+             usually the honest answer to \"what is installed here\".\n",
+            deps,
+            inv.items.len() - deps
+        ));
+    }
+
     out.push_str("\n## By collector\n");
     let mut collectors: Vec<_> = by_collector.iter().collect();
     collectors.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
@@ -514,6 +529,7 @@ fn search_items(s: &mut Server, a: &Value) -> Result<String, String> {
     let collector = str_arg(a, "collector").map(|c| c.to_lowercase());
     let tag = str_arg(a, "tag").map(|t| t.to_lowercase());
     let outdated = bool_arg(a, "outdated");
+    let top_level = bool_arg(a, "top_level");
     let has_note = bool_arg(a, "has_note");
     let min_size = i64_arg(a, "min_size_bytes");
 
@@ -549,6 +565,11 @@ fn search_items(s: &mut Server, a: &Value) -> Result<String, String> {
             }
             if let Some(o) = outdated {
                 if meta_bool(it, "outdated") != o {
+                    return false;
+                }
+            }
+            if let Some(t) = top_level {
+                if crate::graph::is_dependency(it) == t {
                     return false;
                 }
             }

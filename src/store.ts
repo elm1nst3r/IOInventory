@@ -58,6 +58,8 @@ interface State {
   reduceMotion: boolean;
   layout: Layout;
   filters: Set<string>;
+  /** Show packages that were pulled in as dependencies. Off: only what you chose. */
+  showDependencies: boolean;
   activeView: string | null;
   enrichCache: Record<string, Enrichment>;
   enriching: string | null;
@@ -88,6 +90,7 @@ interface State {
   setAccent: (id: string) => void;
   setReduceMotion: (on: boolean) => void;
   setLayout: (l: Layout) => void;
+  toggleDependencies: () => void;
   toggleFilter: (key: string) => void;
   clearFilters: () => void;
   setView: (tag: string | null) => void;
@@ -123,6 +126,7 @@ export const useStore = create<State>((set, get) => ({
   reduceMotion: initialMotion,
   layout: "radial",
   filters: new Set<string>(),
+  showDependencies: false,
   activeView: null,
   enrichCache: {},
   enriching: null,
@@ -250,6 +254,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setLayout: (layout) => set({ layout }),
+
+  toggleDependencies: () => set((s) => ({ showDependencies: !s.showDependencies })),
 
   toggleFilter: (key) => {
     const next = new Set(get().filters);

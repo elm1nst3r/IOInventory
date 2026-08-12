@@ -388,6 +388,31 @@ body,
   background: var(--accent);
   color: #fff;
 }
+/* Dependencies isn't an OR-filter like the others — it's a view mode — so it
+   sits slightly apart and stays muted rather than accent-coloured when on. */
+.fb-chip.fb-deps {
+  margin-left: 6px;
+  border-style: dashed;
+}
+.fb-chip.fb-deps.active {
+  background: var(--bg-3);
+  border-color: var(--line-2);
+  border-style: solid;
+  color: var(--text-dim);
+}
+.fb-chip.fb-deps.active .fb-count {
+  background: var(--bg-2);
+  color: var(--text-dim);
+}
+/* "N deps hidden" next to a collector's item count. */
+.lc-deps {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-faint);
+}
 .fb-clear {
   display: inline-flex;
   align-items: center;

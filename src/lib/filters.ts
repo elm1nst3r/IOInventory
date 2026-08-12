@@ -19,6 +19,21 @@ export function itemHasFlag(item: Item, key: FilterKey): boolean {
   }
 }
 
+/**
+ * A package pulled in by another rather than chosen by the user — on a typical
+ * machine that's most of Homebrew and pip. Collectors that can't tell leave the
+ * flag off, and an unflagged item counts as chosen so nothing is hidden on a
+ * guess.
+ */
+export function isDependency(item: Item): boolean {
+  return item.metadata?.dependency === true;
+}
+
+/** How many of these were pulled in as dependencies. */
+export function countDependencies(items: Item[]): number {
+  return items.reduce((n, i) => n + (isDependency(i) ? 1 : 0), 0);
+}
+
 /** OR semantics: with filters active, an item passes if it matches any of them. */
 export function passesFilters(item: Item, active: Set<string>): boolean {
   if (active.size === 0) return true;
