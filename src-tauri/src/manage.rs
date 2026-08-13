@@ -138,23 +138,44 @@ fn app_roots() -> Vec<std::path::PathBuf> {
     ]
 }
 
-/// macOS marks its own bundles `restricted`; SIP refuses to remove them.
+/// `lstat` for a bundle, or `None` if it can't be read.
 #[cfg(target_os = "macos")]
-fn is_sip_protected(path: &std::path::Path) -> bool {
+fn lstat(path: &std::path::Path) -> Option<libc::stat> {
     use std::os::unix::ffi::OsStrExt;
-    const SF_RESTRICTED: u32 = 0x0008_0000;
-    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-        return true; // unrepresentable path — treat as untouchable
-    };
-    // SAFETY: `stat` writes into a zeroed struct we own, and the path is a
+    let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    // SAFETY: `lstat` writes into a zeroed struct we own, and the path is a
     // valid NUL-terminated C string for the duration of the call.
     unsafe {
         let mut st: libc::stat = std::mem::zeroed();
         if libc::lstat(c_path.as_ptr(), &mut st) != 0 {
-            return true; // can't tell — assume protected
+            return None;
         }
-        st.st_flags & SF_RESTRICTED != 0
+        Some(st)
     }
+}
+
+/// macOS marks its own bundles `restricted`; SIP refuses to remove them.
+#[cfg(target_os = "macos")]
+fn is_sip_protected(path: &std::path::Path) -> bool {
+    const SF_RESTRICTED: u32 = 0x0008_0000;
+    match lstat(path) {
+        Some(st) => st.st_flags & SF_RESTRICTED != 0,
+        None => true, // can't tell — assume protected
+    }
+}
+
+/// Whether removing this bundle will need an administrator.
+///
+/// An app installed by a `.pkg` belongs to root. POSIX would allow an admin
+/// user to move it out of a group-writable /Applications, but macOS asks for
+/// authentication — which Finder can prompt for and we can't, so the attempt
+/// comes back as a bare permission error. Worth saying up front rather than
+/// after the click.
+#[cfg(target_os = "macos")]
+fn needs_admin(path: &std::path::Path) -> bool {
+    // SAFETY: `geteuid` takes no arguments and cannot fail.
+    let euid = unsafe { libc::geteuid() };
+    matches!(lstat(path), Some(st) if st.st_uid == 0 && euid != 0)
 }
 
 /// Whether this bundle may be moved to the Trash, or why not.
@@ -192,11 +213,18 @@ fn app_info(name: &str, source_path: Option<&str>, cask: Option<&str>) -> Action
     let Some(path) = source_path else {
         return ActionInfo::default();
     };
-    match trashable(std::path::Path::new(path)) {
+    let path = std::path::Path::new(path);
+    match trashable(path) {
         Ok(()) => ActionInfo {
             delete: Some(format!("Move “{name}” to the Trash")),
             available: true,
-            note: Some("Moved to the Trash, so you can put it back.".into()),
+            note: Some(if needs_admin(path) {
+                "This app was installed for all users, so macOS will want an administrator. \
+                 If it refuses, drag it to the Trash in Finder, which can ask for your password."
+                    .into()
+            } else {
+                "Moved to the Trash, so you can put it back.".into()
+            }),
             ..Default::default()
         },
         Err(why) => ActionInfo { note: Some(why), ..Default::default() },
@@ -387,8 +415,14 @@ async fn run_app(
         Err(error) => ActionResult {
             command,
             output: format!(
-                "Could not move it to the Trash: {error}\n\nApps that are running, or that need an \
-                 administrator, have to be quit or removed in Finder."
+                "Could not move it to the Trash.\n\n{error}\n\n{}",
+                if needs_admin(path) {
+                    "This app belongs to all users on the machine, so removing it needs an \
+                     administrator. Drag it to the Trash in Finder and macOS will ask for your \
+                     password — this app can't prompt for one."
+                } else {
+                    "If the app is running, quit it and try again."
+                }
             ),
             success: false,
         },
