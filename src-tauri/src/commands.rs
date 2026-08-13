@@ -96,9 +96,18 @@ pub async fn enrich_item(
 }
 
 /// What update/uninstall actions are available for an item.
+///
+/// `source_path` and `cask` come from the item itself: applications aren't
+/// managed by a package manager, so what can be done to one depends on where
+/// its bundle lives and whether a Homebrew cask owns it.
 #[tauri::command]
-pub fn item_actions(collector: String, name: String) -> crate::manage::ActionInfo {
-    crate::manage::info(&collector, &name)
+pub fn item_actions(
+    collector: String,
+    name: String,
+    source_path: Option<String>,
+    cask: Option<String>,
+) -> crate::manage::ActionInfo {
+    crate::manage::info(&collector, &name, source_path.as_deref(), cask.as_deref())
 }
 
 /// Run an update or delete action for a single item. `action` is "update" or "delete".
@@ -107,8 +116,10 @@ pub async fn run_item_action(
     collector: String,
     name: String,
     action: String,
+    source_path: Option<String>,
+    cask: Option<String>,
 ) -> crate::manage::ActionResult {
-    crate::manage::run(&collector, &name, &action).await
+    crate::manage::run(&collector, &name, &action, source_path.as_deref(), cask.as_deref()).await
 }
 
 /// Replace the tags on an item (persisted across re-scans).

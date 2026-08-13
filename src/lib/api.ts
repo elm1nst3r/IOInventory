@@ -16,6 +16,10 @@ import type {
   SnapshotMeta,
 } from "./types";
 
+/** The least an item must carry for the backend to work out its actions. */
+export type ActionTarget = Pick<Item, "collector" | "name"> &
+  Partial<Pick<Item, "source_path" | "metadata">>;
+
 export const api = {
   scan: () => invoke<Inventory>("scan"),
   getInventory: () => invoke<Inventory | null>("get_inventory"),
@@ -30,10 +34,25 @@ export const api = {
       name: item.name,
       sourcePath: item.source_path ?? null,
     }),
-  itemActions: (collector: string, name: string) =>
-    invoke<ActionInfo>("item_actions", { collector, name }),
-  runItemAction: (collector: string, name: string, action: "update" | "delete" | "install") =>
-    invoke<ActionResult>("run_item_action", { collector, name, action }),
+  // Applications carry their own context: what can be done to one depends on
+  // where the bundle lives and whether a Homebrew cask owns it. Typed as the
+  // subset both a full Item and a diff row satisfy, since the snapshot
+  // installer only ever has the latter.
+  itemActions: (item: ActionTarget) =>
+    invoke<ActionInfo>("item_actions", {
+      collector: item.collector,
+      name: item.name,
+      sourcePath: item.source_path ?? null,
+      cask: (item.metadata?.cask as string | undefined) ?? null,
+    }),
+  runItemAction: (item: ActionTarget, action: "update" | "delete" | "install") =>
+    invoke<ActionResult>("run_item_action", {
+      collector: item.collector,
+      name: item.name,
+      action,
+      sourcePath: item.source_path ?? null,
+      cask: (item.metadata?.cask as string | undefined) ?? null,
+    }),
   listCleanups: () => invoke<CleanupAction[]>("list_cleanups"),
   previewCleanup: (id: string) => invoke<CleanupPreview>("preview_cleanup", { id }),
   runCleanup: (id: string) => invoke<CleanupResult>("run_cleanup", { id }),

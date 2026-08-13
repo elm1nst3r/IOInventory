@@ -84,6 +84,8 @@ export interface ActionInfo {
   delete?: string | null;
   install?: string | null;
   available: boolean;
+  /** Why nothing is offered, or a caveat about what will happen. */
+  note?: string | null;
 }
 
 export interface ActionResult {

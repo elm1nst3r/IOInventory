@@ -189,7 +189,7 @@ export default function SnapshotsPanel() {
     for (const it of chosen) {
       setProgress({ done: done.length, total: chosen.length, current: it.name });
       try {
-        const r = await api.runItemAction(it.collector, it.name, "install");
+        const r = await api.runItemAction({ collector: it.collector, name: it.name }, "install");
         done.push({ name: it.name, ok: r.success });
       } catch {
         done.push({ name: it.name, ok: false });

@@ -21,6 +21,20 @@ pub async fn mark(items: &mut [Item]) {
                 obj.insert("latest".into(), serde_json::json!(latest));
             }
         }
+        // An app Homebrew installed should be removed through Homebrew; record
+        // which cask owns it so the manage actions can route there.
+        if it.collector == "app" && !installed.cask_apps.is_empty() {
+            let bundle = it
+                .source_path
+                .as_deref()
+                .and_then(|p| p.rsplit('/').next())
+                .unwrap_or_default();
+            if let Some(token) = installed.cask_apps.get(bundle) {
+                if let Some(obj) = it.metadata.as_object_mut() {
+                    obj.insert("cask".into(), serde_json::json!(token));
+                }
+            }
+        }
         if it.collector == "homebrew" {
             if installed.deprecated.contains(&it.name) {
                 if let Some(obj) = it.metadata.as_object_mut() {
@@ -59,6 +73,10 @@ struct InstalledFacts {
     /// it can't resolve (a formula from a tap that's since gone, say), and
     /// those get no verdict rather than a wrong one.
     known: HashSet<String>,
+    /// `Foo.app` → the cask token that installed it. An app Homebrew manages
+    /// must be removed with `brew uninstall --cask`, not dragged to the Trash,
+    /// or brew keeps believing it's installed.
+    cask_apps: HashMap<String, String>,
 }
 
 /// Deprecation flags and the runtime-dependency graph for every installed
@@ -111,6 +129,23 @@ async fn brew_installed_facts() -> InstalledFacts {
         }
         if !arr.is_empty() {
             facts.depended_on = Some(depended_on);
+        }
+    }
+
+    // Casks declare the .app bundles they install under `artifacts`. The path
+    // can carry a subdirectory ("WezTerm-macos-…/WezTerm.app"), so key on the
+    // bundle name alone — that's what the applications collector sees on disk.
+    for cask in v.get("casks").and_then(|c| c.as_array()).into_iter().flatten() {
+        let Some(token) = cask.get("token").and_then(|t| t.as_str()) else {
+            continue;
+        };
+        for artifact in cask.get("artifacts").and_then(|a| a.as_array()).into_iter().flatten() {
+            for app in artifact.get("app").and_then(|a| a.as_array()).into_iter().flatten() {
+                if let Some(app) = app.as_str() {
+                    let bundle = app.rsplit('/').next().unwrap_or(app);
+                    facts.cask_apps.insert(bundle.to_string(), token.to_string());
+                }
+            }
         }
     }
     facts

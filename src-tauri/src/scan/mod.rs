@@ -104,9 +104,11 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
 
     // Annotate items that have newer versions available (bulk brew/npm checks).
     // Both queries are slow, so skip them when nothing they'd annotate is here.
+    // `app` is in the list because the same brew payload says which apps a cask
+    // owns, which decides whether removing one goes through brew or the Trash.
     if items
         .iter()
-        .any(|i| matches!(i.collector.as_str(), "homebrew" | "homebrew-cask" | "npm"))
+        .any(|i| matches!(i.collector.as_str(), "homebrew" | "homebrew-cask" | "npm" | "app"))
     {
         util::with_scan_diagnostics(
             "version_checks",
@@ -211,7 +213,7 @@ mod tests {
 
         // Per-item management info for a Homebrew formula (no destructive run).
         if let Some(f) = items.iter().find(|i| i.collector == "homebrew") {
-            let a = crate::manage::info("homebrew", &f.name);
+            let a = crate::manage::info("homebrew", &f.name, None, None);
             println!("manage {} -> update={:?} delete={:?} available={}", f.name, a.update, a.delete, a.available);
         }
 

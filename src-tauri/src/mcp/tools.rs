@@ -312,7 +312,7 @@ pub async fn dispatch(s: &mut Server, name: &str, a: &Value) -> Result<String, S
         "export_agent_map" => export_agent_map(s, a),
         "scan" => scan(s, a).await,
         "get_roots" => get_roots(s),
-        "item_actions" => item_actions(a),
+        "item_actions" => item_actions(s, a),
         "set_note" => set_note(s, a),
         "set_tags" => set_tags(s, a),
         "list_snapshots" => list_snapshots(s),
@@ -320,7 +320,7 @@ pub async fn dispatch(s: &mut Server, name: &str, a: &Value) -> Result<String, S
         "diff_snapshot" => diff_snapshot(s, a),
         "list_cleanups" => Ok(list_cleanups()),
         "preview_cleanup" => preview_cleanup(a).await,
-        "run_item_action" => run_item_action(a).await,
+        "run_item_action" => run_item_action(s, a).await,
         "run_cleanup" => run_cleanup(a).await,
         other => Err(format!("unknown tool: {other}")),
     }
@@ -707,7 +707,12 @@ async fn get_item(s: &mut Server, a: &Value) -> Result<String, String> {
         }
     }
 
-    let actions = crate::manage::info(&it.collector, &it.name);
+    let actions = crate::manage::info(
+        &it.collector,
+        &it.name,
+        it.source_path.as_deref(),
+        meta_str(it, "cask").as_deref(),
+    );
     let mut lines = Vec::new();
     if let Some(c) = &actions.install {
         lines.push(format!("- install: `{c}`"));
@@ -833,10 +838,31 @@ fn get_roots(s: &mut Server) -> Result<String, String> {
     Ok(out)
 }
 
-fn item_actions(a: &Value) -> Result<String, String> {
+/// An app's actions depend on where its bundle is and whether a cask owns it,
+/// neither of which an agent supplies. Look the item up in our own inventory
+/// instead of taking a path on trust — this feeds a delete.
+fn app_context(s: &mut Server, collector: &str, name: &str) -> (Option<String>, Option<String>) {
+    if collector != "app" {
+        return (None, None);
+    }
+    let Ok(inv) = inventory(s) else {
+        return (None, None);
+    };
+    match inv
+        .items
+        .iter()
+        .find(|i| i.collector == "app" && i.name.eq_ignore_ascii_case(name))
+    {
+        Some(it) => (it.source_path.clone(), meta_str(it, "cask")),
+        None => (None, None),
+    }
+}
+
+fn item_actions(s: &mut Server, a: &Value) -> Result<String, String> {
     let collector = req_str(a, "collector")?;
     let name = req_str(a, "name")?;
-    let info = crate::manage::info(&collector, &name);
+    let (path, cask) = app_context(s, &collector, &name);
+    let info = crate::manage::info(&collector, &name, path.as_deref(), cask.as_deref());
     let mut lines = Vec::new();
     if let Some(c) = &info.install {
         lines.push(format!("- install: `{c}`"));
@@ -848,12 +874,16 @@ fn item_actions(a: &Value) -> Result<String, String> {
         lines.push(format!("- uninstall: `{c}`"));
     }
     if lines.is_empty() {
-        return Ok(format!("No managed actions for collector `{collector}`."));
+        return Ok(match &info.note {
+            Some(note) => format!("No actions for {name} ({collector}). {note}"),
+            None => format!("No managed actions for collector `{collector}`."),
+        });
     }
     Ok(format!(
-        "Actions for {name} ({collector}):\n{}\n\nTool installed on this machine: {}\n",
+        "Actions for {name} ({collector}):\n{}\n\nTool installed on this machine: {}\n{}",
         lines.join("\n"),
-        if info.available { "yes" } else { "no" }
+        if info.available { "yes" } else { "no" },
+        info.note.map(|n| format!("{n}\n")).unwrap_or_default()
     ))
 }
 
@@ -1094,14 +1124,15 @@ async fn preview_cleanup(a: &Value) -> Result<String, String> {
 
 // ---------------------------------------------------------------- write tools
 
-async fn run_item_action(a: &Value) -> Result<String, String> {
+async fn run_item_action(s: &mut Server, a: &Value) -> Result<String, String> {
     let collector = req_str(a, "collector")?;
     let name = req_str(a, "name")?;
     let action = req_str(a, "action")?;
     if !matches!(action.as_str(), "install" | "update" | "delete") {
         return Err(format!("`action` must be install, update, or delete (got `{action}`)"));
     }
-    let r = crate::manage::run(&collector, &name, &action).await;
+    let (path, cask) = app_context(s, &collector, &name);
+    let r = crate::manage::run(&collector, &name, &action, path.as_deref(), cask.as_deref()).await;
     let status = if r.success { "succeeded" } else { "FAILED" };
     if r.success {
         Ok(format!("`{}` {status}.\n\n{}\n\nRun `scan` to refresh the inventory.", r.command, r.output))

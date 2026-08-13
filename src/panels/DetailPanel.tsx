@@ -157,13 +157,13 @@ function ItemDetail({
     setConfirm(null);
     setActionResult(null);
     setEditError(null);
-    api.itemActions(item.collector, item.name).then(setActions).catch(() => setActions(null));
+    api.itemActions(item).then(setActions).catch(() => setActions(null));
   }, [item.item_key]);
 
   async function doAction(action: Action) {
     setRunning(action);
     try {
-      const r = await api.runItemAction(item.collector, item.name, action);
+      const r = await api.runItemAction(item, action);
       setActionResult(r);
       setConfirm(null);
       // Re-scan so lists/graph reflect the change; give a beat to read the result.
@@ -197,6 +197,7 @@ function ItemDetail({
   // Which management actions this item gets. In the live view that's update /
   // uninstall; in a snapshot the only sensible one is putting back something
   // that's no longer here.
+  const isApp = item.collector === "app";
   const offered = !actions
     ? []
     : readOnly
@@ -205,7 +206,11 @@ function ItemDetail({
         : []
       : [
           actions.update && { action: "update" as const, label: "Update", Icon: ArrowUpCircle },
-          actions.delete && { action: "delete" as const, label: "Uninstall", Icon: Trash2 },
+          actions.delete && {
+            action: "delete" as const,
+            label: isApp && !item.metadata?.cask ? "Move to Trash" : "Uninstall",
+            Icon: Trash2,
+          },
         ].filter((b) => !!b);
 
   const scanOutdated = Boolean(item.metadata?.outdated);
@@ -273,6 +278,12 @@ function ItemDetail({
         </div>
       )}
 
+      {!readOnly && actions && offered.length === 0 && actions.note && (
+        <div className="manage">
+          <div className="manage-note">{actions.note}</div>
+        </div>
+      )}
+
       {actions && offered.length > 0 && (
         <div className="manage">
           {missingLocally && (
@@ -298,12 +309,17 @@ function ItemDetail({
           {!actions.available && (
             <div className="manage-note">Its package manager isn’t on your PATH.</div>
           )}
+          {actions.note && <div className="manage-note">{actions.note}</div>}
 
           {confirm && (
             <div className={`manage-confirm ${confirm === "delete" ? "danger" : ""}`}>
               {confirm === "delete" && <AlertTriangle size={15} className="mc-warn" />}
               <div className="mc-body">
-                <div className="mc-q">{ACTION_LABELS[confirm].question}</div>
+                <div className="mc-q">
+                  {confirm === "delete" && isApp && !item.metadata?.cask
+                    ? "Move this app to the Trash?"
+                    : ACTION_LABELS[confirm].question}
+                </div>
                 <code className="mc-cmd">{actions[confirm]}</code>
                 <div className="mc-actions">
                   <button
@@ -311,7 +327,11 @@ function ItemDetail({
                     disabled={running !== null}
                     onClick={() => doAction(confirm)}
                   >
-                    {running ? "Running…" : ACTION_LABELS[confirm].confirm}
+                    {running
+                      ? "Running…"
+                      : confirm === "delete" && isApp && !item.metadata?.cask
+                        ? "Move to Trash"
+                        : ACTION_LABELS[confirm].confirm}
                   </button>
                   <button className="btn btn-ghost" onClick={() => setConfirm(null)}>
                     Cancel
