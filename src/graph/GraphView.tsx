@@ -19,6 +19,7 @@ import {
   Container,
   Monitor,
   Package,
+  AppWindow,
 } from "lucide-react";
 import { useStore } from "../store";
 import { accentById } from "../lib/appearance";
@@ -40,6 +41,7 @@ const DOMAIN_ICON: Record<string, any> = {
   "d:project": FolderGit2,
   "d:ai_agent": Bot,
   "d:container": Container,
+  "d:application": AppWindow,
 };
 
 function iconFor(n: GraphNode) {

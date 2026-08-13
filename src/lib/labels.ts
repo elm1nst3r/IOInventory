@@ -24,6 +24,7 @@ export const COLLECTOR_LABELS: Record<string, string> = {
   ollama: "Ollama Models",
   huggingface: "Hugging Face Cache",
   "python-ai-lib": "Python AI Libraries",
+  app: "Applications",
 };
 
 export function collectorLabel(c: string): string {

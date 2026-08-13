@@ -103,6 +103,13 @@ pub const SOURCES: &[ScanSource] = &[
         description: "Models and datasets cached by the Hugging Face libraries.",
         domain: Domain::AiAgent,
     },
+    ScanSource {
+        id: "applications",
+        label: "Installed applications",
+        description: "Apps in /Applications on macOS, or Program Files and per-user installs on \
+                       Windows — a comprehensive picture for restoring this machine later.",
+        domain: Domain::Application,
+    },
 ];
 
 /// Catalog entry as sent to the UI.
@@ -214,8 +221,8 @@ mod tests {
         assert_eq!(ids.len(), count, "duplicate source id in SOURCES");
         // Mirrors the collectors joined in scan::run_all.
         let expected = [
-            "ai_libs", "ai_tools", "cargo", "claude", "docker", "gem", "hf_cache", "homebrew",
-            "npm", "ollama", "pip", "repos", "runtimes",
+            "ai_libs", "ai_tools", "applications", "cargo", "claude", "docker", "gem", "hf_cache",
+            "homebrew", "npm", "ollama", "pip", "repos", "runtimes",
         ];
         assert_eq!(ids, expected, "SOURCES has drifted from scan::run_all");
     }

@@ -1,5 +1,6 @@
 pub mod ai_libs;
 pub mod ai_tools;
+pub mod applications;
 pub mod cargo;
 pub mod claude;
 pub mod docker;
@@ -77,7 +78,7 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
     let on = |id: &str| settings.is_enabled(id);
     let warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
-    let (brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_) = tokio::join!(
+    let (brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_, apps_) = tokio::join!(
         when("homebrew", on("homebrew"), warnings.clone(), homebrew::collect()),
         when("npm", on("npm"), warnings.clone(), npm::collect()),
         when("pip", on("pip"), warnings.clone(), pip::collect()),
@@ -91,11 +92,12 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
         when("ai_libs", on("ai_libs"), warnings.clone(), ai_libs::collect()),
         when("ai_tools", on("ai_tools"), warnings.clone(), ai_tools::collect()),
         when("repos", on("repos"), warnings.clone(), repos::collect(&roots)),
+        when("applications", on("applications"), warnings.clone(), applications::collect()),
     );
 
     let mut items = Vec::new();
     for group in [
-        brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_,
+        brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_, apps_,
     ] {
         items.extend(group);
     }

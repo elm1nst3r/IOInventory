@@ -34,7 +34,14 @@ const THEME_MODES: { id: ThemeMode; label: string; icon: typeof Sun }[] = [
 ];
 
 /** Order scan sources are grouped in, matching the rest of the app. */
-const DOMAIN_ORDER: Domain[] = ["package_manager", "runtime", "project", "ai_agent", "container"];
+const DOMAIN_ORDER: Domain[] = [
+  "package_manager",
+  "runtime",
+  "project",
+  "ai_agent",
+  "container",
+  "application",
+];
 
 export default function SettingsPanel() {
   // Destructure the whole store rather than passing a selector: a selector that

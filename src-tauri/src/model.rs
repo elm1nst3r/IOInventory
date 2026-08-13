@@ -14,6 +14,8 @@ pub enum Domain {
     AiAgent,
     #[serde(rename = "container")]
     Container,
+    #[serde(rename = "application")]
+    Application,
 }
 
 impl Domain {
@@ -24,6 +26,7 @@ impl Domain {
             Domain::Project => "project",
             Domain::AiAgent => "ai_agent",
             Domain::Container => "container",
+            Domain::Application => "application",
         }
     }
 
@@ -34,6 +37,7 @@ impl Domain {
             Domain::Project => "Projects",
             Domain::AiAgent => "AI & Agents",
             Domain::Container => "Containers",
+            Domain::Application => "Applications",
         }
     }
 }

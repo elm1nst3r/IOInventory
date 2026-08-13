@@ -72,7 +72,7 @@ pub fn list(allow_write: bool) -> Vec<Value> {
              that key to get_item, set_note, or set_tags.",
             json!({
                 "query": { "type": "string", "description": "Case-insensitive substring matched against the item name and its path." },
-                "domain": { "type": "string", "enum": ["package_manager", "runtime", "project", "ai_agent", "container"], "description": "Restrict to one domain." },
+                "domain": { "type": "string", "enum": ["package_manager", "runtime", "project", "ai_agent", "container", "application"], "description": "Restrict to one domain." },
                 "collector": { "type": "string", "description": "Restrict to one collector, e.g. homebrew, npm, pip, cargo, gem, ollama, docker-image, git-repo, claude-skill, mcp-server. Use list_collectors to see what this machine has." },
                 "tag": { "type": "string", "description": "Only items carrying this user tag." },
                 "outdated": { "type": "boolean", "description": "true = only packages with a newer version available." },
@@ -123,7 +123,7 @@ pub fn list(allow_write: bool) -> Vec<Value> {
              tagged views. This is the single best artifact to read when onboarding to this \
              machine or reproducing it elsewhere.",
             json!({
-                "domain": { "type": "string", "enum": ["package_manager", "runtime", "project", "ai_agent", "container"], "description": "Limit the map to one domain to keep it short." },
+                "domain": { "type": "string", "enum": ["package_manager", "runtime", "project", "ai_agent", "container", "application"], "description": "Limit the map to one domain to keep it short." },
                 "write_file": { "type": "boolean", "description": "Also write AGENT_MAP.md to the user's Documents folder. Default false." }
             }),
             &[],

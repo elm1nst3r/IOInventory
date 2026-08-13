@@ -23,6 +23,7 @@ pub fn to_agent_map(inv: &Inventory) -> String {
         Domain::Runtime,
         Domain::AiAgent,
         Domain::Container,
+        Domain::Application,
     ];
 
     for domain in order {

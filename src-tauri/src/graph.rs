@@ -38,6 +38,7 @@ pub fn build(inv: &Inventory) -> Graph {
         Domain::Project,
         Domain::AiAgent,
         Domain::Container,
+        Domain::Application,
     ];
 
     for domain in order {
@@ -171,6 +172,7 @@ fn pretty_collector(c: &str) -> String {
         "ollama" => "Ollama Models",
         "huggingface" => "Hugging Face Cache",
         "python-ai-lib" => "Python AI Libraries",
+        "app" => "Applications",
         other => other,
     }
     .to_string()

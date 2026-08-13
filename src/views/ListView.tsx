@@ -13,6 +13,7 @@ const DOMAIN_ORDER: Domain[] = [
   "project",
   "ai_agent",
   "container",
+  "application",
 ];
 
 type Sort = "name-asc" | "name-desc" | "size-desc" | "size-asc";

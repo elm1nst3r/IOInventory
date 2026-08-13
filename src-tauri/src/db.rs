@@ -429,6 +429,7 @@ fn parse_domain(s: &str) -> Domain {
         "runtime" => Domain::Runtime,
         "project" => Domain::Project,
         "container" => Domain::Container,
+        "application" => Domain::Application,
         _ => Domain::AiAgent,
     }
 }

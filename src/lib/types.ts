@@ -3,7 +3,8 @@ export type Domain =
   | "runtime"
   | "project"
   | "ai_agent"
-  | "container";
+  | "container"
+  | "application";
 
 export interface Item {
   item_key: string;
@@ -169,4 +170,5 @@ export const DOMAIN_LABELS: Record<Domain, string> = {
   project: "Projects",
   ai_agent: "AI & Agents",
   container: "Containers",
+  application: "Applications",
 };
