@@ -20,6 +20,11 @@ export interface Item {
   tags?: string[];
 }
 
+export interface ScanWarning {
+  source: string;
+  message: string;
+}
+
 export interface ScanInfo {
   id: number;
   started_at: string;
@@ -28,7 +33,7 @@ export interface ScanInfo {
   os: string;
   duration_ms: number;
   item_count: number;
-  warnings: { source: string; message: string }[];
+  warnings: ScanWarning[];
 }
 
 export interface Inventory {

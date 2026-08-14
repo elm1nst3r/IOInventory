@@ -16,6 +16,7 @@ import {
   DownloadCloud,
 } from "lucide-react";
 import { useStore } from "./store";
+import { warningKey } from "./lib/warnings";
 import { api } from "./lib/api";
 import GraphView from "./graph/GraphView";
 import ListView from "./views/ListView";
@@ -51,6 +52,8 @@ export default function App() {
     scanSources,
     toggleSource,
     settingsSaving,
+    dismissedWarnings,
+    dismissWarnings,
   } = useStore();
   const [msg, setMsg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -103,7 +106,12 @@ export default function App() {
   }
 
   const scan_ = inventory?.scan;
-  const warnings = scan_?.warnings;
+  // Warnings the user has already silenced stay silenced when a later scan
+  // reproduces them — see lib/warnings.ts for why that outlives the scan.
+  const warnings = useMemo(
+    () => (scan_?.warnings ?? []).filter((w) => !dismissedWarnings.has(warningKey(w))),
+    [scan_?.warnings, dismissedWarnings],
+  );
 
   // One entry per source that reported something, so five brew failures read as
   // "Homebrew (5)" rather than five loose lines. A warning source is a
@@ -120,6 +128,7 @@ export default function App() {
       return { source, messages, label: known?.label ?? source, canDisable: !!known };
     });
   }, [warnings, scanSources]);
+
 
   // Collapse again when a new scan arrives, so the panel isn't left hanging
   // open over a different set of warnings.
@@ -236,7 +245,7 @@ export default function App() {
       )}
       {error && <div className="banner error" role="alert">{error}</div>}
       {msg && <div className="banner info" role="status">{msg}</div>}
-      {!viewingSnapshot && warnings && warnings.length > 0 && (
+      {!viewingSnapshot && warnings.length > 0 && (
         <div className="banner warning warning-block" role="status">
           <button
             className="warning-summary"
@@ -250,6 +259,13 @@ export default function App() {
               be incomplete.
             </span>
             <ChevronDown size={14} className={`warning-caret ${warningsOpen ? "open" : ""}`} />
+          </button>
+          <button
+            className="warning-dismiss"
+            title="Stop showing these, including if a later scan repeats them"
+            onClick={() => dismissWarnings(warnings)}
+          >
+            Dismiss
           </button>
 
           {warningsOpen && (
@@ -280,6 +296,8 @@ export default function App() {
               <p className="warning-foot">
                 Warnings usually mean a tool wasn't found, timed out, or exited with an error —
                 that source's items may be missing. Turning one off takes effect on your next scan.
+                Dismissing keeps these quiet even when a later scan repeats them; Settings → What to
+                scan brings them back.
               </p>
             </div>
           )}

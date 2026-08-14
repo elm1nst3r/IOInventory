@@ -17,12 +17,14 @@ import {
   type Theme,
   type ThemeMode,
 } from "./lib/appearance";
+import { loadDismissed, saveDismissed, warningKey } from "./lib/warnings";
 import type {
   Enrichment,
   Graph,
   Inventory,
   Item,
   ScanSource,
+  ScanWarning,
   Settings,
   SnapshotMeta,
 } from "./lib/types";
@@ -50,6 +52,12 @@ interface State {
   tab: Tab;
   search: string;
   selectedKey: string | null;
+  /**
+   * Previously selected nodes, most recent last. Drilling from a collector into
+   * one of its items is the common path, and without this the only way back to
+   * the group is to find its node in the graph again.
+   */
+  selectionHistory: string[];
   // Appearance
   themeMode: ThemeMode;
   /** The theme actually in effect — `themeMode` resolved against the OS. */
@@ -60,6 +68,8 @@ interface State {
   filters: Set<string>;
   /** Show packages that were pulled in as dependencies. Off: only what you chose. */
   showDependencies: boolean;
+  /** Warning fingerprints the user has silenced; see lib/warnings.ts. */
+  dismissedWarnings: Set<string>;
   activeView: string | null;
   enrichCache: Record<string, Enrichment>;
   enriching: string | null;
@@ -84,6 +94,8 @@ interface State {
   setTab: (t: Tab) => void;
   setSearch: (s: string) => void;
   select: (key: string | null) => void;
+  /** Return to the previously selected node. */
+  selectBack: () => void;
   saveNote: (key: string, note: string, why: string) => Promise<void>;
   toggleTheme: () => void;
   setThemeMode: (m: ThemeMode) => void;
@@ -91,6 +103,10 @@ interface State {
   setReduceMotion: (on: boolean) => void;
   setLayout: (l: Layout) => void;
   toggleDependencies: () => void;
+  /** Silence these warnings, including on later scans that repeat them. */
+  dismissWarnings: (warnings: ScanWarning[]) => void;
+  /** Bring every silenced warning back. */
+  resetDismissedWarnings: () => void;
   toggleFilter: (key: string) => void;
   clearFilters: () => void;
   setView: (tag: string | null) => void;
@@ -120,6 +136,7 @@ export const useStore = create<State>((set, get) => ({
   tab: "graph",
   search: "",
   selectedKey: null,
+  selectionHistory: [],
   themeMode: initialMode,
   theme: resolveTheme(initialMode),
   accentId: initialAccent,
@@ -127,6 +144,7 @@ export const useStore = create<State>((set, get) => ({
   layout: "radial",
   filters: new Set<string>(),
   showDependencies: false,
+  dismissedWarnings: loadDismissed(),
   activeView: null,
   enrichCache: {},
   enriching: null,
@@ -219,7 +237,25 @@ export const useStore = create<State>((set, get) => ({
 
   setTab: (tab) => set({ tab }),
   setSearch: (search) => set({ search }),
-  select: (selectedKey) => set({ selectedKey }),
+  select: (selectedKey) =>
+    set((s) => {
+      if (selectedKey === s.selectedKey) return {};
+      // Only real selections are worth returning to, and re-selecting
+      // something already in the trail rewinds to it rather than looping.
+      const trail = s.selectedKey
+        ? [...s.selectionHistory.filter((k) => k !== selectedKey), s.selectedKey]
+        : s.selectionHistory;
+      return { selectedKey, selectionHistory: trail.slice(-20) };
+    }),
+
+  selectBack: () =>
+    set((s) => {
+      const trail = [...s.selectionHistory];
+      const previous = trail.pop();
+      return previous === undefined
+        ? {}
+        : { selectedKey: previous, selectionHistory: trail };
+    }),
 
   // The top-bar button flips to the opposite of what's showing, which also
   // means leaving "system" mode — an explicit click is an explicit choice.
@@ -256,6 +292,19 @@ export const useStore = create<State>((set, get) => ({
   setLayout: (layout) => set({ layout }),
 
   toggleDependencies: () => set((s) => ({ showDependencies: !s.showDependencies })),
+
+  dismissWarnings: (warnings) => {
+    const next = new Set(get().dismissedWarnings);
+    for (const w of warnings) next.add(warningKey(w));
+    saveDismissed(next);
+    set({ dismissedWarnings: next });
+  },
+
+  resetDismissedWarnings: () => {
+    const empty = new Set<string>();
+    saveDismissed(empty);
+    set({ dismissedWarnings: empty });
+  },
 
   toggleFilter: (key) => {
     const next = new Set(get().filters);
@@ -298,6 +347,7 @@ export const useStore = create<State>((set, get) => ({
         viewingSnapshot: meta,
         tab: "graph",
         selectedKey: null,
+        selectionHistory: [],
         filters: new Set(),
         activeView: null,
         enrichCache: {},
@@ -314,6 +364,7 @@ export const useStore = create<State>((set, get) => ({
       graph: liveGraph,
       viewingSnapshot: null,
       selectedKey: null,
+      selectionHistory: [],
     });
   },
 

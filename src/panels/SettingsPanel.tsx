@@ -51,6 +51,8 @@ export default function SettingsPanel() {
     scanSources,
     settingsSaving,
     toggleSource,
+    dismissedWarnings,
+    resetDismissedWarnings,
     setAllSources,
     setRoots,
     setMcpAllowWrite,
@@ -289,6 +291,16 @@ export default function SettingsPanel() {
           items disappear from the graph on your next scan. Notes and tags you've written
           are kept, and come back if you switch it on again.
         </p>
+
+        {dismissedWarnings.size > 0 && (
+          <div className="set-note">
+            {dismissedWarnings.size} scan warning{dismissedWarnings.size === 1 ? " is" : "s are"}{" "}
+            dismissed, so they stay hidden even when a scan repeats them.
+            <button className="link-btn" onClick={resetDismissedWarnings}>
+              Show them again
+            </button>
+          </div>
+        )}
 
         {grouped.map((g) => (
           <div key={g.domain} className="set-group">

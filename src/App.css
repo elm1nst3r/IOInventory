@@ -375,6 +375,36 @@ body,
 .warning-caret.open {
   transform: rotate(180deg);
 }
+.warning-dismiss {
+  flex: none;
+  align-self: flex-start;
+  margin: 6px 14px 0 0;
+  background: none;
+  border: 1px solid color-mix(in srgb, #ffb020 45%, var(--line));
+  border-radius: 20px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 11px;
+  cursor: pointer;
+}
+.warning-dismiss:hover {
+  color: var(--text);
+  border-color: #ffb020;
+}
+/* The summary button and the dismiss button sit on one row. */
+.banner.warning-block {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.banner.warning-block .warning-summary {
+  flex: 1;
+  width: auto;
+}
+.banner.warning-block .warning-detail {
+  flex-basis: 100%;
+}
 .warning-detail {
   padding: 2px 16px 12px 40px;
   display: flex;
@@ -2270,4 +2300,75 @@ body,
 :where(button, input, textarea, select):focus-visible {
   outline: 2px solid var(--accent-2) !important;
   outline-offset: 2px;
+}
+
+/* ---- Detail panel: back to where you drilled in from ---- */
+.detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  font: inherit;
+  font-size: 12px;
+  padding: 0 0 8px;
+  margin: 0;
+  cursor: pointer;
+  max-width: 100%;
+}
+.detail-back span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-back:hover {
+  text-decoration: underline;
+}
+
+/* ---- "Running ⋯ 0:12" while a command is in flight ---- */
+.running-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.running-dots {
+  display: inline-flex;
+  gap: 3px;
+  /* Reserve the width the dots occupy so the button doesn't jitter as they
+     fade in and out. */
+  width: 15px;
+}
+.running-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: running-dot 1.05s infinite ease-in-out;
+}
+.running-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.running-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes running-dot {
+  0%, 70%, 100% {
+    opacity: 0.25;
+  }
+  35% {
+    opacity: 1;
+  }
+}
+.running-clock {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+/* Reduce-motion turns off decoration across the app, but a progress indicator
+   that stops moving is worse than none — the clock keeps it honest, so only
+   the dots are stilled. */
+:root[data-reduce-motion="true"] .running-dots i {
+  animation: none;
+  opacity: 0.6;
 }

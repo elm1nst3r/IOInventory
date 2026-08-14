@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
+import RunningLabel from "./RunningLabel";
 import type { CleanupAction, CleanupPreview, CleanupResult } from "../lib/types";
 
 export default function CleanupPanel() {
   const [actions, setActions] = useState<CleanupAction[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [busySince, setBusySince] = useState<number | null>(null);
   const [preview, setPreview] = useState<CleanupPreview | null>(null);
   const [result, setResult] = useState<CleanupResult | null>(null);
   const scan = useStore((state) => state.scan);
@@ -28,17 +30,20 @@ export default function CleanupPanel() {
   async function doPreview(id: string) {
     setResult(null);
     setBusy(id);
+    setBusySince(Date.now());
     try {
       setPreview(await api.previewCleanup(id));
     } catch (error) {
       setResult({ id, command: "", output: String(error), success: false });
     } finally {
       setBusy(null);
+      setBusySince(null);
     }
   }
 
   async function doRun(id: string) {
     setBusy(id);
+    setBusySince(Date.now());
     try {
       const r = await api.runCleanup(id);
       setResult(r);
@@ -48,6 +53,7 @@ export default function CleanupPanel() {
       setResult({ id, command: "", output: String(error), success: false });
     } finally {
       setBusy(null);
+      setBusySince(null);
     }
   }
 
@@ -89,7 +95,7 @@ export default function CleanupPanel() {
                     disabled={!a.available || busy !== null}
                     onClick={() => doPreview(a.id)}
                   >
-                    {busy === a.id && preview?.id !== a.id ? "…" : "Preview"}
+                    {busy === a.id && preview?.id !== a.id ? <RunningLabel label="Checking" since={busySince ?? undefined} /> : "Preview"}
                   </button>
                 </div>
 
@@ -106,7 +112,7 @@ export default function CleanupPanel() {
                         disabled={busy !== null}
                         onClick={() => doRun(a.id)}
                       >
-                        {busy === a.id ? "Running…" : "Confirm & run"}
+                        {busy === a.id ? <RunningLabel since={busySince ?? undefined} /> : "Confirm & run"}
                       </button>
                       <button className="btn btn-ghost" disabled={busy !== null} onClick={() => setPreview(null)}>
                         Cancel

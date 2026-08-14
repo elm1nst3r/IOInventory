@@ -5,12 +5,14 @@ import {
   FolderOpen,
   FileText,
   ArrowUpCircle,
+  ArrowLeft,
   PackagePlus,
   Trash2,
   AlertTriangle,
   X,
 } from "lucide-react";
 import { useStore } from "../store";
+import RunningLabel from "./RunningLabel";
 import { api, formatBytes } from "../lib/api";
 import type { ActionInfo, ActionResult, Item } from "../lib/types";
 
@@ -21,6 +23,29 @@ const ACTION_LABELS: Record<Action, { question: string; confirm: string }> = {
   delete: { question: "Uninstall this item?", confirm: "Confirm uninstall" },
   install: { question: "Install this item?", confirm: "Confirm install" },
 };
+
+/**
+ * "← Applications" above the detail, when you drilled in from somewhere.
+ * Naming the destination matters: a bare arrow doesn't say whether you're
+ * going back to the collector you came from or to some earlier item.
+ */
+function BackLink() {
+  const previous = useStore((s) => s.selectionHistory[s.selectionHistory.length - 1]);
+  const selectBack = useStore((s) => s.selectBack);
+  const inventory = useStore((s) => s.inventory);
+  const graph = useStore((s) => s.graph);
+  if (!previous) return null;
+  const label =
+    inventory?.items.find((i) => i.item_key === previous)?.name ??
+    graph?.nodes.find((n) => n.id === previous)?.label ??
+    "Back";
+  return (
+    <button className="detail-back" onClick={selectBack} title={`Back to ${label}`}>
+      <ArrowLeft size={13} />
+      <span>{label}</span>
+    </button>
+  );
+}
 
 export default function DetailPanel() {
   const selectedKey = useStore((s) => s.selectedKey);
@@ -56,6 +81,7 @@ export default function DetailPanel() {
     });
     return (
       <aside className="detail">
+        <BackLink />
         <div className="detail-head">
           <div className="detail-kind">{gnode.kind}</div>
           <h2>{gnode.label}</h2>
@@ -99,6 +125,7 @@ function ItemDetail({
   const [actions, setActions] = useState<ActionInfo | null>(null);
   const [confirm, setConfirm] = useState<Action | null>(null);
   const [running, setRunning] = useState<Action | null>(null);
+  const [runStarted, setRunStarted] = useState<number | null>(null);
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
 
   const setItemTags = useStore((s) => s.setItemTags);
@@ -162,6 +189,7 @@ function ItemDetail({
 
   async function doAction(action: Action) {
     setRunning(action);
+    setRunStarted(Date.now());
     try {
       const r = await api.runItemAction(item, action);
       setActionResult(r);
@@ -177,6 +205,7 @@ function ItemDetail({
       });
     } finally {
       setRunning(null);
+      setRunStarted(null);
     }
   }
 
@@ -233,6 +262,7 @@ function ItemDetail({
 
   return (
     <aside className="detail">
+      <BackLink />
       <div className="detail-head">
         <div className="detail-kind">{item.collector}</div>
         <h2>{item.name}</h2>
@@ -328,7 +358,7 @@ function ItemDetail({
                     onClick={() => doAction(confirm)}
                   >
                     {running
-                      ? "Running…"
+                      ? <RunningLabel since={runStarted ?? undefined} />
                       : confirm === "delete" && isApp && !item.metadata?.cask
                         ? "Move to Trash"
                         : ACTION_LABELS[confirm].confirm}
