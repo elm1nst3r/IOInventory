@@ -2372,3 +2372,16 @@ body,
   animation: none;
   opacity: 0.6;
 }
+
+/* The install bar now sits above both diff columns, since either can hold
+   something this machine lacks. */
+.diff .install-bar {
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.install-note {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}

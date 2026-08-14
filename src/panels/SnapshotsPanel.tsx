@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   Upload,
@@ -10,6 +10,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useStore } from "../store";
+import RunningLabel from "./RunningLabel";
 import { api } from "../lib/api";
 import { collectorLabel } from "../lib/labels";
 import type { Diff, DiffItem, SnapshotMeta } from "../lib/types";
@@ -37,6 +38,7 @@ export default function SnapshotsPanel() {
   const viewSnapshot = useStore((s) => s.viewSnapshot);
   const scan = useStore((s) => s.scan);
   const inventory = useStore((s) => s.inventory);
+  const liveInventory = useStore((s) => s.liveInventory);
 
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -153,13 +155,28 @@ export default function SnapshotsPanel() {
     }
   }
 
-  // The installable subset of "missing here" (present in snapshot, not current).
-  // Only meaningful when the "after" side is this machine — installing what's
-  // absent from another *snapshot* would be nonsense.
-  const installableMissing = useMemo(
-    () =>
-      diff && targetId === null ? diff.removed.filter((i) => INSTALLABLE.has(i.collector)) : [],
-    [diff, targetId],
+  // What's worth offering to install is decided by this machine, not by which
+  // two things are being compared: installing always means installing *here*,
+  // and the diff is only a source of candidates. So the test is "installable,
+  // and not already present locally" — which works the same whether the other
+  // side is the current scan or a second snapshot, and stays right if a diff
+  // goes stale after something is installed.
+  const presentHere = useMemo(() => {
+    const live = liveInventory ?? inventory;
+    return new Set((live?.items ?? []).map((i) => `${i.collector}:${i.name.toLowerCase()}`));
+  }, [liveInventory, inventory]);
+
+  const canInstall = useCallback(
+    (i: DiffItem) =>
+      INSTALLABLE.has(i.collector) && !presentHere.has(`${i.collector}:${i.name.toLowerCase()}`),
+    [presentHere],
+  );
+
+  // Both columns can hold things this machine lacks once neither side is the
+  // current scan, so both get checkboxes.
+  const installable = useMemo(
+    () => (diff ? [...diff.removed, ...diff.added].filter(canInstall) : []),
+    [diff, canInstall],
   );
 
   function toggle(key: string) {
@@ -171,14 +188,14 @@ export default function SnapshotsPanel() {
   }
   function toggleAll() {
     setSelected((prev) =>
-      prev.size === installableMissing.length
+      prev.size === installable.length
         ? new Set()
-        : new Set(installableMissing.map(diKey)),
+        : new Set(installable.map(diKey)),
     );
   }
 
   async function installSelected() {
-    const chosen = installableMissing.filter((i) => selected.has(diKey(i)));
+    const chosen = installable.filter((i) => selected.has(diKey(i)));
     if (chosen.length === 0) return;
     if (!confirm(`Install ${chosen.length} item(s)? This runs each package manager's install command.`))
       return;
@@ -295,7 +312,7 @@ export default function SnapshotsPanel() {
                 setResults([]);
                 setTargetId(id);
               }}
-              installableMissing={installableMissing}
+              installable={installable}
               selected={selected}
               onToggle={toggle}
               onToggleAll={toggleAll}
@@ -317,7 +334,7 @@ function DiffView({
   snapshots,
   targetId,
   onTargetChange,
-  installableMissing,
+  installable,
   selected,
   onToggle,
   onToggleAll,
@@ -331,7 +348,7 @@ function DiffView({
   snapshots: SnapshotMeta[];
   targetId: number | null;
   onTargetChange: (id: number | null) => void;
-  installableMissing: DiffItem[];
+  installable: DiffItem[];
   selected: Set<string>;
   onToggle: (k: string) => void;
   onToggleAll: () => void;
@@ -340,7 +357,7 @@ function DiffView({
   progress: { done: number; total: number; current: string };
   results: { name: string; ok: boolean }[];
 }) {
-  const installableKeys = new Set(installableMissing.map(diKey));
+  const installableKeys = new Set(installable.map(diKey));
   const okCount = results.filter((r) => r.ok).length;
   const vsCurrent = targetId === null;
 
@@ -376,7 +393,41 @@ function DiffView({
         <span className="d-same">{diff.unchanged} unchanged</span>
       </div>
 
-      {/* Missing here → installable (only when the target is this machine) */}
+      {installable.length > 0 && (
+        <div className="install-bar">
+          <label className="sel-all">
+            <input
+              type="checkbox"
+              checked={selected.size === installable.length && selected.size > 0}
+              onChange={onToggleAll}
+            />
+            select all {installable.length} you don't have
+          </label>
+          <button
+            className="btn btn-primary"
+            disabled={selected.size === 0 || installing}
+            onClick={onInstall}
+          >
+            <PackagePlus size={14} />
+            {installing ? (
+              <RunningLabel label={`Installing ${progress.done}/${progress.total}`} />
+            ) : (
+              `Install ${selected.size} selected`
+            )}
+          </button>
+          <span className="install-note">Installs the current version, not the one recorded.</span>
+        </div>
+      )}
+      {installing && progress.current && (
+        <div className="install-progress">Installing <strong>{progress.current}</strong>…</div>
+      )}
+      {results.length > 0 && (
+        <div className="install-results">
+          Done: {okCount}/{results.length} succeeded
+          {results.some((r) => !r.ok) && " — some failed (check the tool is installed)"}
+        </div>
+      )}
+
       <section className="diff-sec">
         <div className="diff-sec-head">
           <h4>
@@ -384,38 +435,7 @@ function DiffView({
               ? `Missing here — only in the snapshot (${diff.removed.length})`
               : `Only in ${diff.base_label} (${diff.removed.length})`}
           </h4>
-          {installableMissing.length > 0 && (
-            <div className="install-bar">
-              <label className="sel-all">
-                <input
-                  type="checkbox"
-                  checked={selected.size === installableMissing.length && selected.size > 0}
-                  onChange={onToggleAll}
-                />
-                select all installable
-              </label>
-              <button
-                className="btn btn-primary"
-                disabled={selected.size === 0 || installing}
-                onClick={onInstall}
-              >
-                <PackagePlus size={14} />
-                {installing
-                  ? `Installing ${progress.done}/${progress.total}…`
-                  : `Install ${selected.size} selected`}
-              </button>
-            </div>
-          )}
         </div>
-        {installing && progress.current && (
-          <div className="install-progress">Installing <strong>{progress.current}</strong>…</div>
-        )}
-        {results.length > 0 && (
-          <div className="install-results">
-            Done: {okCount}/{results.length} succeeded
-            {results.some((r) => !r.ok) && " — some failed (check the tool is installed)"}
-          </div>
-        )}
         <div className="diff-rows">
           {diff.removed.map((i) => {
             const k = diKey(i);
@@ -480,14 +500,33 @@ function DiffView({
             </h4>
           </div>
           <div className="diff-rows">
-            {diff.added.map((i) => (
-              <div key={diKey(i)} className="diff-row">
-                <span className="diff-nobox" />
-                <span className="diff-name">{i.name}</span>
-                {i.version && <span className="diff-ver">{i.version}</span>}
-                <span className="diff-col">{collectorLabel(i.collector)}</span>
-              </div>
-            ))}
+            {diff.added.map((i) => {
+              const k = diKey(i);
+              const offerInstall = installableKeys.has(k);
+              const res = results.find((r) => r.name === i.name);
+              return (
+                <label key={k} className={`diff-row ${offerInstall ? "installable" : ""}`}>
+                  {offerInstall ? (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(k)}
+                      disabled={installing}
+                      onChange={() => onToggle(k)}
+                    />
+                  ) : (
+                    <span className="diff-nobox" />
+                  )}
+                  <span className="diff-name">{i.name}</span>
+                  {i.version && <span className="diff-ver">{i.version}</span>}
+                  <span className="diff-col">{collectorLabel(i.collector)}</span>
+                  {res && (
+                    <span className={`diff-res ${res.ok ? "ok" : "fail"}`}>
+                      {res.ok ? "installed ✓" : "failed"}
+                    </span>
+                  )}
+                </label>
+              );
+            })}
           </div>
         </section>
       )}
