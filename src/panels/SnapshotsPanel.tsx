@@ -8,6 +8,9 @@ import {
   Trash2,
   PackagePlus,
   ArrowRight,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { useStore } from "../store";
 import RunningLabel from "./RunningLabel";
@@ -51,6 +54,8 @@ export default function SnapshotsPanel() {
   const [targetId, setTargetId] = useState<number | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; current: string }>({
     done: 0,
@@ -137,6 +142,34 @@ export default function SnapshotsPanel() {
     try {
       const { path } = await api.exportSnapshot(meta.id);
       flash(`Exported to ${path}`);
+    } catch (e) {
+      flash(String(e));
+    }
+  }
+
+  function startRename(meta: SnapshotMeta) {
+    setRenamingId(meta.id);
+    setRenameValue(meta.name);
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameValue("");
+  }
+
+  async function commitRename() {
+    const id = renamingId;
+    if (id === null) return;
+    const trimmed = renameValue.trim();
+    const current = snapshots.find((s) => s.id === id);
+    if (!trimmed || trimmed === current?.name) {
+      cancelRename();
+      return;
+    }
+    try {
+      await api.renameSnapshot(id, trimmed);
+      cancelRename();
+      await refreshSnapshots();
     } catch (e) {
       flash(String(e));
     }
@@ -266,10 +299,35 @@ export default function SnapshotsPanel() {
           {snapshots.map((s) => (
             <div key={s.id} className={`snap-card ${diffFor?.id === s.id ? "active" : ""}`}>
               <div className="snap-card-main">
-                <div className="snap-card-title">
-                  {s.name}
-                  <span className={`snap-src ${s.source}`}>{s.source}</span>
-                </div>
+                {renamingId === s.id ? (
+                  <div className="snap-card-title snap-rename">
+                    <input
+                      autoFocus
+                      className="snap-rename-input"
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitRename();
+                        if (e.key === "Escape") cancelRename();
+                      }}
+                      onBlur={commitRename}
+                    />
+                    <button title="Save" onMouseDown={(e) => e.preventDefault()} onClick={commitRename}>
+                      <Check size={14} />
+                    </button>
+                    <button title="Cancel" onMouseDown={(e) => e.preventDefault()} onClick={cancelRename}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="snap-card-title">
+                    {s.name}
+                    <button title="Rename" className="snap-rename-btn" onClick={() => startRename(s)}>
+                      <Pencil size={13} />
+                    </button>
+                    <span className={`snap-src ${s.source}`}>{s.source}</span>
+                  </div>
+                )}
                 <div className="snap-card-meta">
                   {s.created_at.slice(0, 10)} · {s.item_count} items · {s.host}
                 </div>

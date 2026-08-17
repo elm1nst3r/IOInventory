@@ -385,6 +385,12 @@ impl Db {
         Ok(())
     }
 
+    pub fn rename_snapshot(&self, id: i64, name: &str) -> Result<()> {
+        self.conn
+            .execute("UPDATE snapshots SET name = ?1 WHERE id = ?2", params![name, id])?;
+        Ok(())
+    }
+
     // ---- Settings ----
 
     /// Read the persisted settings. A missing or unreadable row falls back to

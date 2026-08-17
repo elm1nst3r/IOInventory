@@ -72,6 +72,7 @@ export const api = {
   getSnapshotInventory: (id: number) => invoke<Inventory>("get_snapshot_inventory", { id }),
   getSnapshotGraph: (id: number) => invoke<Graph>("get_snapshot_graph", { id }),
   deleteSnapshot: (id: number) => invoke<void>("delete_snapshot", { id }),
+  renameSnapshot: (id: number, name: string) => invoke<void>("rename_snapshot", { id, name }),
   /** `targetId` null compares the snapshot against the current scan. */
   diffSnapshot: (id: number, targetId: number | null = null) =>
     invoke<Diff>("diff_snapshot", { id, targetId }),

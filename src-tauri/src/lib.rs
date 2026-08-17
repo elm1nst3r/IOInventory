@@ -71,6 +71,7 @@ pub fn run() {
             commands::get_snapshot_inventory,
             commands::get_snapshot_graph,
             commands::delete_snapshot,
+            commands::rename_snapshot,
             commands::diff_snapshot,
             commands::export_snapshot,
             commands::import_snapshot,

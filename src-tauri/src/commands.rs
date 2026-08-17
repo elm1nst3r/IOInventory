@@ -276,6 +276,16 @@ pub async fn delete_snapshot(state: State<'_, AppState>, id: i64) -> Result<(), 
     db.delete_snapshot(id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub async fn rename_snapshot(state: State<'_, AppState>, id: i64, name: String) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("snapshot name can't be empty".into());
+    }
+    let db = state.db.lock().unwrap();
+    db.rename_snapshot(id, name).map_err(|e| e.to_string())
+}
+
 /// Diff a snapshot (base) against another snapshot, or against the current
 /// inventory when `target_id` is omitted.
 #[tauri::command]
