@@ -1,19 +1,11 @@
-use crate::db::Db;
-use crate::model::{CleanupAction, CleanupPreview, CleanupResult, Graph, Inventory};
-use crate::settings::{ScanSourceInfo, Settings};
-use crate::{cleanup, export, graph, scan};
-use std::sync::Mutex;
+use agent_ledger_core::model::{CleanupAction, CleanupPreview, CleanupResult, Graph, Inventory};
+use agent_ledger_core::settings::{ScanSourceInfo, Settings};
+use agent_ledger_core::state::AppState;
+use agent_ledger_core::{cleanup, export, graph, scan};
 use std::time::Instant;
 use tauri::State;
 
-/// Shared application state: the SQLite handle and the user's settings (which
-/// carry the workspace roots and the enabled scan sources).
-pub struct AppState {
-    pub db: Mutex<Db>,
-    pub settings: Mutex<Settings>,
-}
-
-use crate::scan::util::{host_name, os_name};
+use agent_ledger_core::scan::util::{host_name, os_name};
 
 /// Run a full on-demand scan, persist it, and return the fresh inventory.
 #[tauri::command]
@@ -106,8 +98,8 @@ pub fn item_actions(
     name: String,
     source_path: Option<String>,
     cask: Option<String>,
-) -> crate::manage::ActionInfo {
-    crate::manage::info(&collector, &name, source_path.as_deref(), cask.as_deref())
+) -> agent_ledger_core::manage::ActionInfo {
+    agent_ledger_core::manage::info(&collector, &name, source_path.as_deref(), cask.as_deref())
 }
 
 /// Run an update or delete action for a single item. `action` is "update" or "delete".
@@ -118,8 +110,8 @@ pub async fn run_item_action(
     action: String,
     source_path: Option<String>,
     cask: Option<String>,
-) -> crate::manage::ActionResult {
-    crate::manage::run(&collector, &name, &action, source_path.as_deref(), cask.as_deref()).await
+) -> agent_ledger_core::manage::ActionResult {
+    agent_ledger_core::manage::run(&collector, &name, &action, source_path.as_deref(), cask.as_deref()).await
 }
 
 /// Replace the tags on an item (persisted across re-scans).
@@ -189,7 +181,7 @@ pub fn set_roots(state: State<'_, AppState>, roots: Vec<String>) -> Result<(), S
 /// The parts of the machine that can be scanned, for the settings UI.
 #[tauri::command]
 pub fn list_scan_sources() -> Vec<ScanSourceInfo> {
-    crate::settings::catalog()
+    agent_ledger_core::settings::catalog()
 }
 
 #[tauri::command]
@@ -213,14 +205,14 @@ pub fn set_settings(state: State<'_, AppState>, settings: Settings) -> Result<Se
 
 /// Where the bundled MCP server binary lives and how to point an agent at it.
 #[tauri::command]
-pub fn mcp_info() -> crate::mcp::McpInfo {
-    crate::mcp::info()
+pub fn mcp_info() -> agent_ledger_core::mcp::McpInfo {
+    agent_ledger_core::mcp::info()
 }
 
 // ---- Snapshots ----
 
-use crate::model::{Diff, SnapshotMeta};
-use crate::snapshot;
+use agent_ledger_core::model::{Diff, SnapshotMeta};
+use agent_ledger_core::snapshot;
 
 /// Save the current inventory as a named snapshot.
 #[tauri::command]

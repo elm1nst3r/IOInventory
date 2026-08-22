@@ -12,7 +12,7 @@
 //! filled in. It shares `ledger.sqlite` with the desktop app, so the app does
 //! not need to be running.
 
-use agent_ledger_lib::{db, mcp};
+use agent_ledger_core::{db, mcp};
 use std::path::PathBuf;
 
 const HELP: &str = "\

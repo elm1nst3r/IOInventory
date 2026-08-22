@@ -1,19 +1,8 @@
-mod cleanup;
 mod commands;
-mod export;
-mod graph;
-mod manage;
-mod model;
-mod settings;
-mod snapshot;
 
-// Public so the `ioinv-mcp` binary can share the ledger, the scan engine, and
-// the MCP server itself with the desktop app.
-pub mod db;
-pub mod mcp;
-pub mod scan;
-
-use commands::AppState;
+use agent_ledger_core::db;
+use agent_ledger_core::scan;
+use agent_ledger_core::state::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 

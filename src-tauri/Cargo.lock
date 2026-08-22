@@ -12,6 +12,21 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 name = "agent-ledger"
 version = "0.19.0"
 dependencies = [
+ "agent-ledger-core",
+ "chrono",
+ "dirs 5.0.1",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-updater",
+]
+
+[[package]]
+name = "agent-ledger-core"
+version = "0.19.0"
+dependencies = [
  "anyhow",
  "chrono",
  "dirs 5.0.1",
@@ -20,11 +35,6 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-updater",
  "tokio",
  "trash",
  "walkdir",
@@ -1842,7 +1852,7 @@ dependencies = [
 name = "ioinv-mcp"
 version = "0.19.0"
 dependencies = [
- "agent-ledger",
+ "agent-ledger-core",
  "serde_json",
  "tokio",
 ]

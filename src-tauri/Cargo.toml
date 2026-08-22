@@ -3,7 +3,7 @@
 # app and bundles it (mainBinaryName only renames the file, it doesn't choose).
 # `default-members` keeps a bare `cargo build` here scoped to the app.
 [workspace]
-members = ["mcp-server"]
+members = ["core", "mcp-server"]
 default-members = ["."]
 
 [package]
@@ -21,23 +21,16 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-libc = "0.2.189"
+agent-ledger-core = { path = "core" }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
-trash = { version = "5.2.6", default-features = false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.32", features = ["bundled"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "fs", "io-std", "io-util"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
-walkdir = "2"
-anyhow = "1"
-hostname = "0.4"
 
 [profile.release]
 opt-level = "s"

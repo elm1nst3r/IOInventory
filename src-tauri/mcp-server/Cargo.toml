@@ -9,8 +9,8 @@ name = "ioinv-mcp"
 path = "src/main.rs"
 
 [dependencies]
-# The server itself lives in the app crate (agent_ledger_lib::mcp) so it shares
-# the scan engine and the ledger; this crate is just the entry point.
-agent-ledger = { path = ".." }
+# The server itself lives in the core crate (agent_ledger_core::mcp) so it
+# shares the scan engine and the ledger; this crate is just the entry point.
+agent-ledger-core = { path = "../core" }
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread"] }
