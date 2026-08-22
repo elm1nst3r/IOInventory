@@ -162,6 +162,17 @@ yourself; without it the agent can still show you the exact command to run.
 Building from source? `npm run mcp:build` produces `src-tauri/target/debug/ioinv-mcp`, and
 `ioinv-mcp --print-config` prints a config snippet with the right path filled in.
 
+### ⌨️ Prefer the terminal?
+
+[**IO Inventory TUI**](https://github.com/elm1nst3r/IOInventory_tui) is a companion terminal
+browser built on `ratatui` — scan, browse, manage, and snapshot without leaving the terminal. It
+reads and writes the same `ledger.sqlite` as this app, so both stay in sync.
+
+```bash
+brew tap elm1nst3r/ioinventory
+brew install ioinventory-tui
+```
+
 ## 🏗️ How it works
 
 A **Rust core** runs every collector concurrently with per-command timeouts (so a hung tool
