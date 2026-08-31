@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod ai_libs;
 pub mod ai_tools;
 pub mod applications;
@@ -101,6 +102,11 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
     ] {
         items.extend(group);
     }
+
+    // Fold the same MCP server configured for several agents into one row, and
+    // give every AI capability the `agents` list the AI view reads. Cheap and
+    // purely in-memory, so it runs before the network-bound version checks.
+    agents::link(&mut items);
 
     // Annotate items that have newer versions available (bulk brew/npm checks).
     // Both queries are slow, so skip them when nothing they'd annotate is here.

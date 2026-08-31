@@ -18,6 +18,7 @@ export const COLLECTOR_LABELS: Record<string, string> = {
   "claude-plugin": "Claude Plugins",
   "claude-command": "Claude Commands",
   "claude-agent": "Claude Agents",
+  "claude-marketplace": "Plugin Marketplaces",
   "mcp-server": "MCP Servers",
   "ai-app": "AI Apps & IDEs",
   "ai-cli": "AI CLIs & Agents",

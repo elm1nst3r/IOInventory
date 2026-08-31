@@ -1908,6 +1908,122 @@ body,
   background: var(--text-faint);
 }
 
+/* ---- AI & Agents ---- */
+.ai-panel .util-group-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ai-agents {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+.ai-agent-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 11px 13px;
+  cursor: pointer;
+  color: var(--text);
+  transition: all 0.1s;
+}
+.ai-agent-card:hover {
+  border-color: var(--line-2);
+  background: var(--bg-3);
+}
+.ai-agent-card.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ai-agent-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.ai-agent-head strong {
+  font-size: 13px;
+}
+.ai-agent-desc {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.ai-agent-foot {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.ai-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 11px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  transition: all 0.1s;
+}
+.ai-row:hover {
+  border-color: var(--line-2);
+  background: var(--bg-3);
+}
+.ai-row.sel {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ai-row-main,
+.ai-row-sub {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.ai-row-sub {
+  flex-shrink: 0;
+}
+.ai-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-from {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.ai-badges {
+  display: inline-flex;
+  gap: 4px;
+}
+.ai-badge {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  background: var(--bg-3);
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+/* Shared across agents — the thing this view exists to surface. */
+.ai-badge.shared {
+  border-color: var(--accent-edge);
+  color: var(--accent-2);
+}
+
 /* ---- Settings ---- */
 .settings-layout {
   display: flex;

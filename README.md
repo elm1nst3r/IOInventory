@@ -108,7 +108,7 @@ bulk-install everything you're missing.
 | **Package managers** | Homebrew formulae/casks, npm/pnpm global, pip/pipx, cargo, gem |
 | **Runtimes** | Node, Python, Ruby, Go, Rust, Java, Deno, Bun + version managers (pyenv, nvm, asdf, mise…) |
 | **Projects** | Git repos in your workspaces, with tech-stack + launch-command detection, remote & last-commit |
-| **AI & Agents** | Claude Code skills/plugins/commands/MCP, other AI IDEs & CLIs, Ollama models, Hugging Face cache, Python AI libs |
+| **AI & Agents** | Claude Code skills/plugins/commands/marketplaces/MCP, other AI IDEs & CLIs, Ollama models, Hugging Face cache, Python AI libs — with a dedicated **AI tab** grouping them by capability and marking what's shared across agents |
 | **Containers** | Docker images & containers |
 | **Applications** | Everything in `/Applications` (macOS) or `Program Files` / per-user installs (Windows) — the full "what's on this machine" picture, opt-in like everything else |
 

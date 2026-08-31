@@ -40,7 +40,7 @@ const initialAccent = initialAccentId();
 const initialMotion = initialReduceMotion();
 let systemThemeWatched = false;
 
-type Tab = "graph" | "list" | "cleanup" | "history" | "settings";
+type Tab = "graph" | "list" | "ai" | "cleanup" | "history" | "settings";
 type Layout = "radial" | "tree";
 
 interface State {
