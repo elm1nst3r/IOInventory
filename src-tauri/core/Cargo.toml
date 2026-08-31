@@ -1,6 +1,6 @@
 [package]
 name = "agent-ledger-core"
-version = "0.19.0"
+version = "0.20.0"
 description = "IO Inventory core — scan engine, item model, ledger persistence, and MCP server (no Tauri dependency)"
 authors = ["elm1nst3r"]
 edition = "2021"
