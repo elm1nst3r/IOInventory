@@ -82,7 +82,7 @@ pub const SOURCES: &[ScanSource] = &[
     ScanSource {
         id: "claude",
         label: "Claude Code",
-        description: "Skills, commands, agents, plugins and configured MCP servers.",
+        description: "Skills, commands, agents, plugins, marketplaces and configured MCP servers.",
         domain: Domain::AiAgent,
     },
     ScanSource {

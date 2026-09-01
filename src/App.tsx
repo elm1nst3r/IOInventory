@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Settings as SettingsIcon,
   DownloadCloud,
+  Bot,
 } from "lucide-react";
 import { useStore } from "./store";
 import { warningKey } from "./lib/warnings";
@@ -25,6 +26,7 @@ import FilterBar from "./panels/FilterBar";
 import SearchBox from "./panels/SearchBox";
 import "./App.css";
 
+const AiPanel = lazy(() => import("./panels/AiPanel"));
 const CleanupPanel = lazy(() => import("./panels/CleanupPanel"));
 const SnapshotsPanel = lazy(() => import("./panels/SnapshotsPanel"));
 const SettingsPanel = lazy(() => import("./panels/SettingsPanel"));
@@ -152,6 +154,9 @@ export default function App() {
           </button>
           <button aria-current={tab === "list" ? "page" : undefined} className={tab === "list" ? "active" : ""} onClick={() => setTab("list")}>
             <List size={15} /> List
+          </button>
+          <button aria-current={tab === "ai" ? "page" : undefined} className={tab === "ai" ? "active" : ""} onClick={() => setTab("ai")}>
+            <Bot size={15} /> AI
           </button>
           <button aria-current={tab === "cleanup" ? "page" : undefined} className={tab === "cleanup" ? "active" : ""} onClick={() => setTab("cleanup")}>
             <Wrench size={15} /> Utilities
@@ -323,6 +328,18 @@ export default function App() {
           <SnapshotsPanel />
         ) : tab === "cleanup" ? (
           <CleanupPanel />
+        ) : tab === "ai" ? (
+          // Split layout without the filter bar: the AI view groups by
+          // capability rather than by flag, but selecting a row should still
+          // open the same detail pane with its notes and actions.
+          <div className="workspace">
+            <div className="split">
+              <div className="split-main">
+                <AiPanel />
+              </div>
+              <DetailPanel />
+            </div>
+          </div>
         ) : (
           <div className="workspace">
             <FilterBar />
