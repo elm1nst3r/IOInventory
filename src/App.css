@@ -1237,6 +1237,265 @@ body,
   color: var(--text-faint);
   font-size: 12.5px;
 }
+/* ---- Update everything (featured card) ---- */
+.ua-card {
+  position: relative;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+    var(--bg-1);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+.ua-card.is-running {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+.ua-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.ua-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--accent-grad);
+  color: var(--on-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.ua-title {
+  flex: 1;
+  min-width: 0;
+}
+.ua-title h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.ua-title p {
+  margin: 3px 0 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.ua-title strong {
+  color: var(--text);
+}
+.ua-fail-text {
+  color: var(--danger);
+  font-weight: 600;
+}
+.ua-cta {
+  flex: none;
+}
+.ua-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  font-weight: 600;
+}
+.ua-progress {
+  height: 4px;
+  margin: 16px 0 4px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.ua-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent-grad);
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+.ua-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-left: 56px;
+}
+.ua-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.ua-chip b {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+.ua-chip.muted {
+  color: var(--text-faint);
+}
+.ua-confirm {
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.ua-confirm ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: ua;
+}
+.ua-confirm li {
+  counter-increment: ua;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.ua-confirm li::before {
+  content: counter(ua);
+  flex: none;
+  width: 18px;
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: right;
+}
+.ua-confirm li code,
+.ua-step-cmd {
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--accent-2);
+}
+.ua-note {
+  color: var(--text-faint);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+.ua-steps {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.ua-step + .ua-step {
+  border-top: 1px solid var(--line);
+}
+.ua-step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.ua-step-row:disabled {
+  cursor: default;
+}
+.ua-step-row:hover:not(:disabled) {
+  background: var(--bg-2);
+}
+.ua-step.pending .ua-step-title {
+  color: var(--text-faint);
+}
+.ua-step.running {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.ua-step-title {
+  flex: none;
+  font-weight: 500;
+}
+.ua-step-cmd {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+.ua-step-time {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ua-ico {
+  flex: none;
+}
+.ua-ico.pending {
+  color: var(--line-2);
+}
+.ua-ico.running {
+  color: var(--accent-2);
+}
+.ua-ico.ok {
+  color: var(--ok);
+}
+.ua-ico.fail {
+  color: var(--danger);
+}
+.ua-chev {
+  flex: none;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+.ua-chev.open {
+  transform: rotate(90deg);
+}
+.ua-out {
+  margin: 0;
+  padding: 10px 14px 12px 37px;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-top: 1px dashed var(--line);
+}
+.spin-slow {
+  animation: spin 2.4s linear infinite;
+}
+.tab-badge {
+  margin-left: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+@media (max-width: 640px) {
+  .ua-head {
+    flex-wrap: wrap;
+  }
+  .ua-chips {
+    padding-left: 0;
+  }
+  .ua-step-cmd {
+    display: none;
+  }
+}
+
 .cleanup-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -2546,4 +2805,10 @@ body,
 .install-note {
   color: var(--text-faint);
   font-size: 11.5px;
+}
+
+/* The step's own status icon already spins; the timer needs only the clock. */
+.ua-step-time .running-label > svg,
+.ua-step-time .running-dots {
+  display: none;
 }

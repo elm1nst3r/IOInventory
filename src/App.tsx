@@ -56,6 +56,7 @@ export default function App() {
     settingsSaving,
     dismissedWarnings,
     dismissWarnings,
+    updateRun,
   } = useStore();
   const [msg, setMsg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -160,6 +161,12 @@ export default function App() {
           </button>
           <button aria-current={tab === "cleanup" ? "page" : undefined} className={tab === "cleanup" ? "active" : ""} onClick={() => setTab("cleanup")}>
             <Wrench size={15} /> Utilities
+            {updateRun && !updateRun.finishedAt && (
+              <span className="tab-badge" title="Update everything is running">
+                {Math.min(updateRun.steps.filter((st) => st.status === "ok" || st.status === "fail").length + 1, updateRun.steps.length)}/
+                {updateRun.steps.length}
+              </span>
+            )}
           </button>
           <button aria-current={tab === "history" ? "page" : undefined} className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
             <History size={15} /> History

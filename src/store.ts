@@ -19,6 +19,7 @@ import {
 } from "./lib/appearance";
 import { loadDismissed, saveDismissed, warningKey } from "./lib/warnings";
 import type {
+  CleanupAction,
   Enrichment,
   Graph,
   Inventory,
@@ -39,6 +40,41 @@ const initialMode = initialThemeMode();
 const initialAccent = initialAccentId();
 const initialMotion = initialReduceMotion();
 let systemThemeWatched = false;
+
+/** One updater inside an "Update everything" run. */
+export interface UpdateStep {
+  id: string;
+  title: string;
+  command: string;
+  status: "pending" | "running" | "ok" | "fail";
+  startedAt?: number;
+  finishedAt?: number;
+  output?: string;
+}
+
+export interface UpdateRun {
+  startedAt: number;
+  finishedAt?: number;
+  steps: UpdateStep[];
+}
+
+/** Outcome of the last finished run, kept per device for the "last run" line. */
+export interface LastUpdateRun {
+  at: number;
+  ok: number;
+  failed: string[];
+}
+
+const LAST_UPDATE_KEY = "ioinv-last-update-all";
+
+export function loadLastUpdateRun(): LastUpdateRun | null {
+  try {
+    const raw = localStorage.getItem(LAST_UPDATE_KEY);
+    return raw ? (JSON.parse(raw) as LastUpdateRun) : null;
+  } catch {
+    return null;
+  }
+}
 
 type Tab = "graph" | "list" | "ai" | "cleanup" | "history" | "settings";
 type Layout = "radial" | "tree";
@@ -88,6 +124,13 @@ interface State {
   scanSources: ScanSource[];
   settingsSaving: boolean;
   appVersion: string;
+  /**
+   * The current or most recent "Update everything" run. Lives in the store,
+   * not the Utilities panel, so switching tabs mid-run neither hides the
+   * progress nor orphans the loop that drives it.
+   */
+  updateRun: UpdateRun | null;
+  lastUpdateRun: LastUpdateRun | null;
 
   init: () => Promise<void>;
   scan: () => Promise<void>;
@@ -125,9 +168,82 @@ interface State {
   setAutoUpdateCheck: (on: boolean) => Promise<void>;
   /** Shared write-through used by the three setters above. */
   persistSettings: (next: Settings) => Promise<void>;
+  runUpdateAll: (updaters: CleanupAction[]) => Promise<void>;
+  dismissUpdateRun: () => void;
 }
 
 export const useStore = create<State>((set, get) => ({
+  updateRun: null,
+  lastUpdateRun: loadLastUpdateRun(),
+
+  // Each updater runs as its own backend call, one after another, so every
+  // step can report as it finishes instead of one result after many minutes.
+  // A failure is recorded and the next updater still runs: they're
+  // independent, and a broken npm shouldn't cost you the rustup update.
+  runUpdateAll: async (updaters) => {
+    const current = get().updateRun;
+    if (current && !current.finishedAt) return; // already running
+    const patchStep = (id: string, patch: Partial<UpdateStep>) =>
+      set((s) =>
+        s.updateRun
+          ? {
+              updateRun: {
+                ...s.updateRun,
+                steps: s.updateRun.steps.map((st) => (st.id === id ? { ...st, ...patch } : st)),
+              },
+            }
+          : {},
+      );
+
+    set({
+      updateRun: {
+        startedAt: Date.now(),
+        steps: updaters.map((u) => ({
+          id: u.id,
+          title: u.title,
+          command: u.command,
+          status: "pending",
+        })),
+      },
+    });
+
+    for (const u of updaters) {
+      patchStep(u.id, { status: "running", startedAt: Date.now() });
+      try {
+        const r = await api.runCleanup(u.id);
+        patchStep(u.id, {
+          status: r.success ? "ok" : "fail",
+          finishedAt: Date.now(),
+          output: r.output,
+        });
+      } catch (error) {
+        patchStep(u.id, { status: "fail", finishedAt: Date.now(), output: String(error) });
+      }
+    }
+
+    const steps = get().updateRun?.steps ?? [];
+    const last: LastUpdateRun = {
+      at: Date.now(),
+      ok: steps.filter((st) => st.status === "ok").length,
+      failed: steps.filter((st) => st.status === "fail").map((st) => st.title),
+    };
+    try {
+      localStorage.setItem(LAST_UPDATE_KEY, JSON.stringify(last));
+    } catch {
+      /* per-device nicety only */
+    }
+    set((s) => ({
+      lastUpdateRun: last,
+      updateRun: s.updateRun ? { ...s.updateRun, finishedAt: Date.now() } : null,
+    }));
+    // One rescan at the end so versions and outdated flags reflect the run.
+    if (last.ok > 0) await get().scan();
+  },
+
+  dismissUpdateRun: () => {
+    if (get().updateRun?.finishedAt) set({ updateRun: null });
+  },
+
   inventory: null,
   graph: null,
   scanning: false,

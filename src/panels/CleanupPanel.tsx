@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { useStore } from "../store";
 import RunningLabel from "./RunningLabel";
+import UpdateAllCard from "./UpdateAllCard";
 import type { CleanupAction, CleanupPreview, CleanupResult } from "../lib/types";
 
 export default function CleanupPanel() {
@@ -11,6 +12,10 @@ export default function CleanupPanel() {
   const [preview, setPreview] = useState<CleanupPreview | null>(null);
   const [result, setResult] = useState<CleanupResult | null>(null);
   const scan = useStore((state) => state.scan);
+  // The update-all run holds the backend's operation lock between steps;
+  // starting a single utility meanwhile would just fail with "already running".
+  const updateRunning = useStore((state) => state.updateRun !== null && !state.updateRun.finishedAt);
+  const locked = busy !== null || updateRunning;
 
   useEffect(() => {
     api.listCleanups().then(setActions).catch((error) => {
@@ -18,8 +23,15 @@ export default function CleanupPanel() {
     });
   }, []);
 
+  // Every installed updater, in the order "Update everything" runs them.
+  const updaters = useMemo(
+    () => actions.filter((a) => a.category === "update" && a.id !== "update-all" && a.available),
+    [actions],
+  );
+
   const groups = useMemo(() => {
-    const updates = actions.filter((a) => a.category === "update");
+    // "Update everything" has its own card at the top.
+    const updates = actions.filter((a) => a.category === "update" && a.id !== "update-all");
     const cleanup = actions.filter((a) => a.category !== "update");
     return [
       { key: "update", title: "Updates", subtitle: "Bring tools and packages up to date.", items: updates },
@@ -74,6 +86,8 @@ export default function CleanupPanel() {
         </div>
       )}
 
+      {actions.length > 0 && <UpdateAllCard updaters={updaters} otherBusy={busy !== null} />}
+
       {groups.map((g) => (
         <section key={g.key} className="util-group">
           <div className="util-group-head">
@@ -92,7 +106,7 @@ export default function CleanupPanel() {
                 <div className="cc-actions">
                   <button
                     className="btn"
-                    disabled={!a.available || busy !== null}
+                    disabled={!a.available || locked}
                     onClick={() => doPreview(a.id)}
                   >
                     {busy === a.id && preview?.id !== a.id ? <RunningLabel label="Checking" since={busySince ?? undefined} /> : "Preview"}
@@ -109,7 +123,7 @@ export default function CleanupPanel() {
                       <span>Run {a.category === "update" ? "update" : "this"}?</span>
                       <button
                         className="btn btn-danger"
-                        disabled={busy !== null}
+                        disabled={locked}
                         onClick={() => doRun(a.id)}
                       >
                         {busy === a.id ? <RunningLabel since={busySince ?? undefined} /> : "Confirm & run"}
