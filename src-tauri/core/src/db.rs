@@ -109,10 +109,35 @@ impl Db {
         )?;
         // Added in v0.10.x. SQLite has no `ADD COLUMN IF NOT EXISTS`, so an
         // already-migrated database legitimately returns a duplicate-column error.
-        let _ = self.conn.execute(
+        if let Err(e) = self.conn.execute(
             "ALTER TABLE scans ADD COLUMN warnings_json TEXT NOT NULL DEFAULT '[]'",
             [],
-        );
+        ) {
+            // Anything but "already there" (a locked or read-only ledger, say)
+            // would otherwise surface later as a baffling missing-column error.
+            if !e.to_string().contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+
+        // v0.21.0 renamed Codex/Gemini MCP servers from `github · codex` to
+        // `github` (the agent moved into metadata), which changed their keys
+        // and orphaned any notes and tags on them. Re-point those rows. Runs on
+        // every open but only matches old-style keys, so it's idempotent;
+        // OR IGNORE keeps whatever the user already wrote on the new key.
+        for agent in ["codex", "gemini"] {
+            let suffix = format!(" · {agent}#{agent}");
+            for table in ["notes", "tags"] {
+                self.conn.execute(
+                    &format!(
+                        "UPDATE OR IGNORE {table}
+                         SET item_key = substr(item_key, 1, length(item_key) - length(?1)) || ?2
+                         WHERE item_key LIKE 'ai_agent:mcp-server:%' || ?1"
+                    ),
+                    params![suffix, format!("#{agent}")],
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -371,7 +396,10 @@ impl Db {
         );
         match row {
             Ok((meta, data)) => {
-                let items: Vec<Item> = serde_json::from_str(&data).unwrap_or_default();
+                // A corrupt blob is an error to show, not an empty snapshot that
+                // would diff as "everything was removed".
+                let items: Vec<Item> = serde_json::from_str(&data)
+                    .map_err(|e| anyhow::anyhow!("snapshot {id} is unreadable: {e}"))?;
                 Ok(Some((meta, items)))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -491,5 +519,30 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         println!("tags_persist_and_export OK");
+    }
+
+    /// Notes and tags written against a pre-0.21 Codex/Gemini MCP key follow
+    /// the server to its new key; ones already on the new key are kept.
+    #[test]
+    fn legacy_mcp_keys_are_migrated() {
+        let path = std::env::temp_dir().join(format!("io-inv-mig-{}.sqlite", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let mut db = Db::open(&path).unwrap();
+            db.set_note("ai_agent:mcp-server:github · codex#codex", "", "old note").unwrap();
+            db.set_item_tags("ai_agent:mcp-server:linear · gemini#gemini", &["work".into()]).unwrap();
+            db.set_note("ai_agent:mcp-server:jira · codex#codex", "", "stale").unwrap();
+            db.set_note("ai_agent:mcp-server:jira#codex", "", "newer").unwrap();
+        }
+        let db = Db::open(&path).unwrap(); // migration runs on open
+        let why = |k: &str| -> Option<String> {
+            db.conn.query_row("SELECT why FROM notes WHERE item_key = ?1", [k], |r| r.get(0)).ok()
+        };
+        assert_eq!(why("ai_agent:mcp-server:github#codex").as_deref(), Some("old note"));
+        assert_eq!(why("ai_agent:mcp-server:jira#codex").as_deref(), Some("newer"));
+        let tags = db.all_tags().unwrap();
+        assert_eq!(tags.get("ai_agent:mcp-server:linear#gemini"), Some(&vec!["work".to_string()]));
+        let _ = std::fs::remove_file(&path);
+        println!("legacy_mcp_keys_are_migrated OK");
     }
 }

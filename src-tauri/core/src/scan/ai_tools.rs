@@ -297,6 +297,9 @@ fn parse_codex_mcp(text: &str) -> Vec<Item> {
     // server another agent has configured.
     let mut current: Option<String> = None;
     let mut command: Option<String> = None;
+    // Streamable-HTTP servers carry `url` instead of `command`; it stands in
+    // for the command (and makes the transport `http`) when there's no command.
+    let mut url: Option<String> = None;
     for line in text.lines() {
         let l = line.trim();
         if l.starts_with('[') {
@@ -313,26 +316,41 @@ fn parse_codex_mcp(text: &str) -> Vec<Item> {
             });
             if opened.as_deref() != current.as_deref() {
                 if let Some(name) = current.take() {
-                    items.push(mcp_item(&name, "codex", command.take()));
+                    items.push(mcp_item(&name, "codex", command.take().or(url.take())));
                 }
                 command = None;
+                url = None;
                 current = opened.filter(|n| !n.is_empty());
             }
             continue;
         }
-        if current.is_some() && command.is_none() {
-            if let Some(value) = l.strip_prefix("command").and_then(|r| r.trim().strip_prefix('=')) {
-                let value = value.trim().trim_matches('"');
-                if !value.is_empty() {
-                    command = Some(value.to_string());
-                }
+        if current.is_none() {
+            continue;
+        }
+        for (key, slot) in [("command", &mut command), ("url", &mut url)] {
+            if slot.is_some() {
+                continue;
+            }
+            if let Some(value) = l.strip_prefix(key).and_then(|r| r.trim_start().strip_prefix('=')) {
+                *slot = toml_string(value);
             }
         }
     }
     if let Some(name) = current {
-        items.push(mcp_item(&name, "codex", command));
+        items.push(mcp_item(&name, "codex", command.or(url)));
     }
     items
+}
+
+/// The value of a single-line TOML string (`"basic"` or `'literal'`), minus any
+/// trailing `# comment`. Anything else (arrays, numbers) isn't a string → None.
+fn toml_string(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    let quote = raw.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+    let body = &raw[1..];
+    let end = body.find(quote)?;
+    let value = &body[..end];
+    (!value.is_empty()).then(|| value.to_string())
 }
 
 /// Gemini MCP servers are declared as JSON under `mcpServers` in settings.json.
@@ -350,6 +368,8 @@ fn collect_gemini_mcp(items: &mut Vec<Item>) {
                 .get("command")
                 .and_then(|c| c.as_str())
                 .or_else(|| cfg.get("url").and_then(|u| u.as_str()))
+                // Gemini's streamable-HTTP servers use `httpUrl` (`url` is SSE).
+                .or_else(|| cfg.get("httpUrl").and_then(|u| u.as_str()))
                 .map(str::to_string);
             items.push(mcp_item(name, "gemini", command));
         }
@@ -432,6 +452,23 @@ args = ["x"]
         assert_eq!(names(&items), ["a"]);
         assert_eq!(meta(&items, "a", "command"), None);
         println!("codex_command_prefix_is_not_command OK");
+    }
+
+    /// Codex's streamable-HTTP servers have `url` instead of `command`; literal
+    /// strings and trailing comments must not leak into the value.
+    #[test]
+    fn codex_url_and_toml_quoting() {
+        let items = parse_codex_mcp(
+            "[mcp_servers.remote]\nurl = \"https://example.com/mcp\" # hosted\n\n\
+             [mcp_servers.lit]\ncommand = 'uvx'  # literal string\n\n\
+             [mcp_servers.both]\nurl = \"https://x\"\ncommand = \"npx\"\n",
+        );
+        assert_eq!(meta(&items, "remote", "command"), Some("https://example.com/mcp"));
+        assert_eq!(meta(&items, "remote", "transport"), Some("http"));
+        assert_eq!(meta(&items, "lit", "command"), Some("uvx"));
+        // A command beats a url when a block somehow has both.
+        assert_eq!(meta(&items, "both", "command"), Some("npx"));
+        println!("codex_url_and_toml_quoting OK");
     }
 
     /// An http server is transport-tagged from its URL, not its command.

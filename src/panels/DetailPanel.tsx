@@ -218,8 +218,12 @@ function ItemDetail({
   // Description / homepage can come from live enrichment or baked-in metadata.
   const description = info?.description ?? (item.metadata?.description as string | undefined);
   const homepage = info?.homepage ?? (item.metadata?.homepage as string | undefined);
-  // A file worth opening directly (a skill's SKILL.md, etc.).
-  const openFile = item.metadata?.file as string | undefined;
+  // A file worth opening directly (a skill's SKILL.md, etc.). Not offered for a
+  // snapshot: its paths are historical, and an imported .ioinv.json can name
+  // any path at all — `openPath` hands it to the default app, which for a
+  // script or bundle means running it.
+  const openFile = readOnly ? undefined : (item.metadata?.file as string | undefined);
+  const openFolder = readOnly ? undefined : (item.source_path ?? undefined);
 
   // Update status: prefer scan-time signal, fall back to enrichment.
   const scanLatest: string | undefined = item.metadata?.latest;
@@ -275,7 +279,7 @@ function ItemDetail({
         </p>
       )}
 
-      {(remoteUrl || homepage || openFile || item.source_path) && (
+      {(remoteUrl || homepage || openFile || openFolder) && (
         <div className="quick-actions">
           {remoteUrl && (
             <button className="btn qa-btn" onClick={() => openUrl(remoteUrl)}>
@@ -292,8 +296,8 @@ function ItemDetail({
               <FileText size={14} /> Open {openFile.split("/").pop()}
             </button>
           )}
-          {item.source_path && (
-            <button className="btn qa-btn" onClick={() => openPath(item.source_path!)}>
+          {openFolder && (
+            <button className="btn qa-btn" onClick={() => openPath(openFolder)}>
               <FolderOpen size={14} /> Open folder
             </button>
           )}

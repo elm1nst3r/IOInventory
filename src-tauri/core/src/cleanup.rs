@@ -111,7 +111,9 @@ const SPECS: &[Spec] = &[
         description: "Clear the global npm download cache.",
         category: "cleanup",
         tool: "npm",
-        preview: ("npm", &["cache", "verify"]),
+        // Not `npm cache verify`: despite the name it garbage-collects the
+        // cache, and a preview must change nothing. See `npm_cache_preview`.
+        preview: ("npm", &["config", "get", "cache"]),
         steps: &[("npm", &["cache", "clean", "--force"])],
         command: "npm cache clean --force",
     },
@@ -133,7 +135,7 @@ const UPDATE_ALL: &str = "update-all";
 fn available_updates() -> Vec<&'static Spec> {
     SPECS
         .iter()
-        .filter(|s| s.category == "update" && util::is_available(s.tool))
+        .filter(|s| s.category == "update" && util::is_available(resolve_tool(s.tool)))
         .collect()
 }
 
@@ -146,7 +148,7 @@ pub fn list() -> Vec<CleanupAction> {
             description: s.description.into(),
             category: s.category.into(),
             command: s.command.into(),
-            available: util::is_available(s.tool),
+            available: util::is_available(resolve_tool(s.tool)),
         })
         .collect();
 
@@ -164,6 +166,16 @@ pub fn list() -> Vec<CleanupAction> {
         },
     );
     actions
+}
+
+/// Homebrew/system Pythons ship `pip3`; some setups only have `pip`. Same
+/// fallback `manage.rs` uses for its install/update/uninstall templates.
+fn resolve_tool(tool: &'static str) -> &'static str {
+    if tool == "pip3" && !util::is_available("pip3") && util::is_available("pip") {
+        "pip"
+    } else {
+        tool
+    }
 }
 
 fn find(id: &str) -> Option<&'static Spec> {
@@ -196,7 +208,11 @@ pub async fn preview(id: &str) -> CleanupPreview {
         };
     };
     let (tool, args) = spec.preview;
-    let (_, out) = util::run_capture(tool, args, Duration::from_secs(30)).await;
+    let out = if spec.id == "npm-cache" {
+        npm_cache_preview().await
+    } else {
+        util::run_capture(resolve_tool(tool), args, Duration::from_secs(30)).await.1
+    };
     let out = out.trim();
     let output = if out.is_empty() {
         if spec.category == "update" {
@@ -218,6 +234,7 @@ pub async fn preview(id: &str) -> CleanupPreview {
 /// failing step (later steps are skipped).
 async fn run_spec_steps(spec: &Spec, timeout: Duration, output: &mut String) -> bool {
     for (tool, args) in spec.steps {
+        let tool = resolve_tool(tool);
         output.push_str(&format!("$ {tool} {}\n", args.join(" ")));
         let (ok, out) = util::run_capture(tool, args, timeout).await;
         output.push_str(out.trim());
@@ -243,14 +260,20 @@ pub async fn run(id: &str) -> CleanupResult {
     if id == UPDATE_ALL {
         let timeout = Duration::from_secs(1800);
         let mut output = String::new();
-        let mut success = true;
+        // Updaters are independent: a broken npm shouldn't cost you the
+        // rustup and pipx updates queued behind it. Run them all, then say
+        // which failed.
+        let mut failed: Vec<&str> = Vec::new();
         for spec in available_updates() {
             output.push_str(&format!("=== {} ({}) ===\n", spec.title, spec.command));
             if !run_spec_steps(spec, timeout, &mut output).await {
-                success = false;
-                output.push_str("(stopped — step failed)\n\n");
-                break;
+                failed.push(spec.title);
+                output.push_str("(failed — continuing with the next updater)\n\n");
             }
+        }
+        let success = failed.is_empty();
+        if !success {
+            output.push_str(&format!("Failed: {}\n", failed.join(", ")));
         }
         return CleanupResult {
             id: UPDATE_ALL.into(),
@@ -282,5 +305,26 @@ pub async fn run(id: &str) -> CleanupResult {
         command: spec.command.into(),
         output: if output.trim().is_empty() { "(done)".into() } else { output.trim().into() },
         success,
+    }
+}
+
+/// Size and location of the npm cache, without touching it.
+async fn npm_cache_preview() -> String {
+    let Some(path) = util::run("npm", &["config", "get", "cache"]).await else {
+        return "Couldn't locate the npm cache.".into();
+    };
+    let path = path.trim().to_string();
+    // A big cache is a lot of files; walk it off the async runtime.
+    let walk = path.clone();
+    let size = tokio::task::spawn_blocking(move || util::dir_size(std::path::Path::new(&walk)))
+        .await
+        .ok()
+        .flatten();
+    match size {
+        Some(0) | None => String::new(), // → "Nothing to clean."
+        Some(bytes) => format!(
+            "npm cache at {path}: {:.1} MB would be removed.",
+            bytes as f64 / 1_048_576.0
+        ),
     }
 }

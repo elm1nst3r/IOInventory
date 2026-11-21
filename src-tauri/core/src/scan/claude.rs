@@ -155,6 +155,7 @@ fn plugin_meta(key: &str) -> serde_json::Value {
 struct Marketplace {
     source: Option<String>,
     path: Option<String>,
+    updated: Option<String>,
 }
 
 /// Plugin/skill marketplaces Claude Code knows about. The layout has moved
@@ -178,14 +179,17 @@ fn collect_marketplaces(plugins_dir: &Path, items: &mut Vec<Item>) {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
             continue;
         };
-        if whole_file {
+        const CONTAINERS: [&str; 3] = ["marketplaces", "knownMarketplaces", "extraKnownMarketplaces"];
+        let map = v.as_object();
+        let wrapped = map.is_some_and(|m| CONTAINERS.iter().any(|k| m.contains_key(*k)));
+        // A file that wraps its entries in a container key isn't itself a
+        // name → entry map; reading it whole would list "marketplaces" as one.
+        if whole_file && !wrapped {
             harvest_marketplaces(&v, &mut found);
         }
-        if let Some(map) = v.as_object() {
-            for key in ["marketplaces", "knownMarketplaces", "extraKnownMarketplaces"] {
-                if let Some(inner) = map.get(key) {
-                    harvest_marketplaces(inner, &mut found);
-                }
+        for key in CONTAINERS {
+            if let Some(inner) = map.and_then(|m| m.get(key)) {
+                harvest_marketplaces(inner, &mut found);
             }
         }
     }
@@ -210,8 +214,9 @@ fn collect_marketplaces(plugins_dir: &Path, items: &mut Vec<Item>) {
     }
 
     for (name, info) in found {
-        let mut item = Item::new(Domain::AiAgent, "claude-marketplace", name)
-            .meta(serde_json::json!({ "agent": AGENT, "source": info.source }));
+        let mut item = Item::new(Domain::AiAgent, "claude-marketplace", name).meta(
+            serde_json::json!({ "agent": AGENT, "source": info.source, "updated": info.updated }),
+        );
         if let Some(p) = info.path {
             item = item.path(p);
         }
@@ -233,6 +238,15 @@ fn harvest_marketplaces(
         // without one must not blank out the URL an earlier one gave us.
         if entry.source.is_none() {
             entry.source = marketplace_source(info);
+        }
+        // Where Claude Code cloned it. Beats the directory sweep, which only
+        // finds clones that happen to sit under `marketplaces/` or `repos/`.
+        let field = |k: &str| info.get(k).and_then(|x| x.as_str()).filter(|s| !s.is_empty()).map(str::to_string);
+        if entry.path.is_none() {
+            entry.path = field("installLocation");
+        }
+        if entry.updated.is_none() {
+            entry.updated = field("lastUpdated");
         }
     };
     match v {
@@ -351,5 +365,46 @@ fn collect_mcp(v: &serde_json::Value, items: &mut Vec<Item>) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The real `known_marketplaces.json` shape (nested `source`, plus
+    /// `installLocation`/`lastUpdated`), and a wrapped file that must not
+    /// list its container key as a marketplace.
+    #[test]
+    fn marketplaces_read_known_shapes() {
+        let dir = std::env::temp_dir().join(format!("ioinv-mkt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("marketplaces/swept")).unwrap();
+        std::fs::write(
+            dir.join("known_marketplaces.json"),
+            r#"{ "official": {
+                   "source": { "source": "github", "repo": "anthropics/claude-plugins-official" },
+                   "installLocation": "/elsewhere/official",
+                   "lastUpdated": "2026-11-20T08:05:20.396Z" } }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("marketplaces.json"),
+            r#"{ "marketplaces": { "team": { "url": "https://git.example/team.git" } } }"#,
+        )
+        .unwrap();
+
+        let mut items = Vec::new();
+        collect_marketplaces(&dir, &mut items);
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let names: Vec<&str> = items.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, ["official", "swept", "team"]);
+        let official = &items[0];
+        assert_eq!(official.metadata["source"], "anthropics/claude-plugins-official");
+        assert_eq!(official.metadata["updated"], "2026-11-20T08:05:20.396Z");
+        assert_eq!(official.source_path.as_deref(), Some("/elsewhere/official"));
+        assert_eq!(items[2].metadata["source"], "https://git.example/team.git");
+        println!("marketplaces_read_known_shapes OK — {names:?}");
     }
 }

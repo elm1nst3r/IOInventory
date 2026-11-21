@@ -6,7 +6,8 @@
 #
 # Prereqs:
 #   - .secrets/updater.key  (the updater private key; keep it safe, never commit)
-#   - versions already bumped in package.json, src-tauri/Cargo.toml, tauri.conf.json
+#   - versions already bumped in package.json, tauri.conf.json, and the three
+#     Cargo.toml files (src-tauri/, src-tauri/core/, src-tauri/mcp-server/) — checked below
 #   - gh authenticated; git tag will be created/pushed
 #
 # What it does:
@@ -24,6 +25,29 @@ REPO="elm1nst3r/IOInventory"
 KEY=".secrets/updater.key"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+# latest.json advertises $VERSION; the app compares it with the version it was
+# built with. If a manifest wasn't bumped, users get a perpetual "update
+# available" for an update that installs the same version. Check them all.
+mismatch=0
+for f in package.json src-tauri/tauri.conf.json; do
+  v="$(node -p "require('./$f').version")"
+  [ "$v" = "$VERSION" ] || { echo "version mismatch: $f is $v, releasing $VERSION"; mismatch=1; }
+done
+for f in src-tauri/Cargo.toml src-tauri/core/Cargo.toml src-tauri/mcp-server/Cargo.toml; do
+  v="$(sed -n 's/^version *= *"\(.*\)"/\1/p' "$f" | head -1)"
+  [ "$v" = "$VERSION" ] || { echo "version mismatch: $f is $v, releasing $VERSION"; mismatch=1; }
+done
+[ "$mismatch" = 0 ] || exit 1
+
+# The tag is put on HEAD, so uncommitted changes would ship without being in it.
+[ -z "$(git status --porcelain --untracked-files=no)" ] \
+  || { echo "working tree has uncommitted changes — commit before releasing"; exit 1; }
+# An existing tag on a different commit means this version was already cut.
+if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null \
+   && [ "$(git rev-parse "v$VERSION^{commit}")" != "$(git rev-parse HEAD)" ]; then
+  echo "tag v$VERSION already exists on another commit"; exit 1
+fi
 
 [ -f "$KEY" ] || { echo "missing $KEY"; exit 1; }
 export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY")"

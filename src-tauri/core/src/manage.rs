@@ -281,6 +281,25 @@ pub fn info(collector: &str, name: &str, source_path: Option<&str>, cask: Option
     }
 }
 
+/// Why `value` can't be handed to a package manager as a name, if it can't.
+///
+/// No shell is involved, but the tool still parses its own argv: a "name" like
+/// `--force` or `-r` would be read as a flag. Names arrive from the UI, from
+/// imported snapshot files, and from MCP clients, so they're checked here at
+/// the one place that executes them rather than trusted.
+fn bad_name(value: &str) -> Option<String> {
+    if value.trim().is_empty() {
+        return Some("The item name is empty.".into());
+    }
+    if value.starts_with('-') {
+        return Some(format!("Refusing to run with '{value}': it would be read as an option, not a name."));
+    }
+    if value.chars().any(char::is_control) {
+        return Some("The item name contains control characters.".into());
+    }
+    None
+}
+
 pub async fn run(
     collector: &str,
     name: &str,
@@ -288,6 +307,9 @@ pub async fn run(
     source_path: Option<&str>,
     cask: Option<&str>,
 ) -> ActionResult {
+    if let Some(why) = bad_name(name).or_else(|| cask.and_then(bad_name)) {
+        return ActionResult { command: String::new(), output: why, success: false };
+    }
     if collector == "app" {
         return run_app(name, action, source_path, cask).await;
     }
@@ -440,6 +462,29 @@ async fn run_app(
         command: String::new(),
         output: "Removing applications is only supported on macOS.".into(),
         success: false,
+    }
+}
+
+#[cfg(test)]
+mod name_tests {
+    use super::*;
+
+    /// Names are discrete argv entries, but the tool still parses flags out of
+    /// them — this is reachable from MCP and from imported snapshot files.
+    #[tokio::test]
+    async fn flag_shaped_names_are_refused() {
+        for name in ["--force", "-r", "", "  ", "a\nb"] {
+            let r = run("npm", name, "install", None, None).await;
+            assert!(!r.success, "{name:?} should be refused");
+            assert!(r.command.is_empty(), "{name:?} must not reach a command");
+        }
+        // A flag-shaped cask token is refused too, before any brew call.
+        let r = run("app", "Evil", "delete", None, Some("--zap")).await;
+        assert!(!r.success && r.command.is_empty());
+        // Ordinary names, including scoped npm packages, still pass the check.
+        assert!(bad_name("@scope/pkg").is_none());
+        assert!(bad_name("ripgrep").is_none());
+        println!("flag_shaped_names_are_refused OK");
     }
 }
 

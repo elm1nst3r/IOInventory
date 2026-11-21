@@ -121,8 +121,19 @@ export default function AiPanel() {
     // How much each agent has attached to it — the number that makes an agent
     // card worth looking at.
     const counts = new Map<string, number>();
+    let attached = 0;
     for (const c of capabilities) {
-      for (const slug of agentsOf(c)) counts.set(slug, (counts.get(slug) ?? 0) + 1);
+      const slugs = agentsOf(c);
+      if (slugs.length > 0) attached++;
+      for (const slug of slugs) counts.set(slug, (counts.get(slug) ?? 0) + 1);
+    }
+
+    // Installed plugins per marketplace, so a marketplace row says what it
+    // actually supplies rather than just where it lives.
+    const pluginsFrom = new Map<string, number>();
+    for (const c of capabilities) {
+      const m = c.collector === "claude-plugin" ? c.metadata?.marketplace : undefined;
+      if (typeof m === "string" && m) pluginsFrom.set(m, (pluginsFrom.get(m) ?? 0) + 1);
     }
 
     const sections = SECTIONS.map((s) => ({
@@ -137,8 +148,10 @@ export default function AiPanel() {
       sections,
       shared: capabilities.filter((i) => agentsOf(i).length > 1),
       capabilityCount: capabilities.length,
+      attached,
       nameOf,
       counts,
+      pluginsFrom,
     };
   }, [inventory]);
 
@@ -173,6 +186,8 @@ export default function AiPanel() {
     // where it came from underneath.
     const display = (item.metadata?.plugin as string) ?? item.name;
     const from = item.metadata?.marketplace ?? item.metadata?.source;
+    const supplied =
+      item.collector === "claude-marketplace" ? (model.pluginsFrom.get(item.name) ?? 0) : 0;
     return (
       <button
         key={item.item_key}
@@ -183,6 +198,11 @@ export default function AiPanel() {
           <span className="ai-row-name">{display}</span>
           {item.version && <span className="chip-ver">{item.version}</span>}
           {item.size_bytes ? <span className="chip-size">{formatBytes(item.size_bytes)}</span> : null}
+          {supplied > 0 && (
+            <span className="chip-size">
+              {supplied} plugin{supplied === 1 ? "" : "s"}
+            </span>
+          )}
         </span>
         <span className="ai-row-sub">
           {typeof from === "string" && from && <span className="ai-from">{from}</span>}
@@ -210,7 +230,7 @@ export default function AiPanel() {
               <Bot size={15} /> Agents
             </h3>
             <span>
-              {model.agents.length} installed · {model.capabilityCount} capabilities between them
+              {model.agents.length} installed · {model.attached} capabilities attached
             </span>
           </div>
           <div className="ai-agents">
