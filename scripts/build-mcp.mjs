@@ -18,7 +18,7 @@
 // `tauri build --config src-tauri/tauri.mcp.conf.json` (see scripts/release.sh).
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,9 +38,19 @@ if (!triple) {
   process.exit(1);
 }
 
-// -p selects the workspace member; it shares src-tauri/target with the app
-// build, so the common dependencies are compiled once.
-const args = ["build", "--manifest-path", join(root, "src-tauri", "Cargo.toml"), "-p", "ioinv-mcp"];
+// Built in its own target dir, not the app's. Since cargo 1.100's build-dir
+// layout, building the `ioinv-mcp` package creates a *directory* at
+// target/<profile>/build/ioinv-mcp — and tauri-build 2.x, which finds the
+// target dir by walking up from OUT_DIR, copies the sidecar to exactly that
+// path, calls remove_file on the directory, and fails the build with EPERM.
+// A separate target dir costs a second compile of the shared deps.
+const targetDir = join(root, "src-tauri", "target", "mcp");
+const args = [
+  "build",
+  "--manifest-path", join(root, "src-tauri", "Cargo.toml"),
+  "-p", "ioinv-mcp",
+  "--target-dir", targetDir,
+];
 if (release) args.push("--release");
 
 console.log(`build-mcp: cargo ${args.join(" ")}`);
@@ -51,7 +61,14 @@ const env = { ...process.env };
 delete env.TAURI_CONFIG;
 execFileSync("cargo", args, { stdio: "inherit", env });
 
-const built = join(root, "src-tauri", "target", profile, `ioinv-mcp${exe}`);
+const built = join(targetDir, profile, `ioinv-mcp${exe}`);
+
+// A cache dir left there by an earlier in-tree build (`cargo test --workspace`
+// does it too) would trip tauri-build the same way. It's only cargo's cache.
+rmSync(join(root, "src-tauri", "target", profile, "build", "ioinv-mcp"), {
+  recursive: true,
+  force: true,
+});
 const outDir = join(root, "src-tauri", "binaries");
 const staged = join(outDir, `ioinv-mcp-${triple}${exe}`);
 
