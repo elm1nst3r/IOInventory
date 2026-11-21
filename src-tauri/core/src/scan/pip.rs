@@ -84,5 +84,57 @@ pub async fn collect() -> Vec<Item> {
             }
         }
     }
+    if util::is_available("uv") {
+        if let Some(out) = util::run("uv", &["tool", "list"]).await {
+            items.extend(parse_uv_tools(&out));
+        }
+    }
     items
+}
+
+/// `uv tool list`: a `name vX.Y.Z` line per tool, each followed by `- exe`
+/// lines for the executables it provides (and possibly a "No tools installed"
+/// notice, which has no version and is skipped).
+fn parse_uv_tools(out: &str) -> Vec<Item> {
+    let mut items: Vec<Item> = Vec::new();
+    for line in out.lines() {
+        let line = line.trim_end();
+        if let Some(exe) = line.trim_start().strip_prefix("- ") {
+            if let Some(last) = items.last_mut() {
+                if let Some(arr) = last.metadata["executables"].as_array_mut() {
+                    arr.push(serde_json::json!(exe.trim()));
+                }
+            }
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let (Some(name), Some(ver)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let Some(ver) = ver.strip_prefix('v').filter(|v| v.starts_with(|c: char| c.is_ascii_digit())) else {
+            continue;
+        };
+        items.push(
+            Item::new(Domain::PackageManager, "uv-tool", name)
+                .version(ver)
+                .meta(serde_json::json!({ "kind": "application", "executables": [] })),
+        );
+    }
+    items
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uv_tool_list_parses() {
+        let items = parse_uv_tools("ruff v0.6.9\n- ruff\nllm v0.19\n- llm\n- llm-x\n");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].name, "ruff");
+        assert_eq!(items[0].version.as_deref(), Some("0.6.9"));
+        assert_eq!(items[1].metadata["executables"].as_array().map(|a| a.len()), Some(2));
+        assert!(parse_uv_tools("No tools installed\n").is_empty());
+        println!("uv_tool_list_parses OK");
+    }
 }

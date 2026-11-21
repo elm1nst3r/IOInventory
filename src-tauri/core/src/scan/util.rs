@@ -59,7 +59,7 @@ pub const CMD_TIMEOUT: Duration = Duration::from_secs(4);
 /// A GUI app launched from Finder inherits a minimal PATH that omits
 /// Homebrew, cargo, etc. Build an augmented PATH covering the usual install
 /// locations so `which` and command execution find the real binaries.
-fn augmented_path() -> &'static OsStr {
+pub fn augmented_path() -> &'static OsStr {
     static PATH: OnceLock<OsString> = OnceLock::new();
     PATH.get_or_init(|| {
         let mut dirs: Vec<PathBuf> = Vec::new();
@@ -86,6 +86,12 @@ fn augmented_path() -> &'static OsStr {
             for sub in ["AppData/Roaming/npm", "scoop/shims"] {
                 dirs.push(h.join(sub));
             }
+        }
+        // Editors keep their CLI (`code`, `cursor`, `windsurf`) inside the app
+        // bundle; it's only on PATH if the user ran "Install 'code' command".
+        #[cfg(target_os = "macos")]
+        for app in ["Visual Studio Code", "Cursor", "Windsurf"] {
+            dirs.push(PathBuf::from(format!("/Applications/{app}.app/Contents/Resources/app/bin")));
         }
         // Preserve anything already on PATH (dev runs inherit a rich PATH).
         if let Some(existing) = std::env::var_os("PATH") {
@@ -141,6 +147,70 @@ pub fn which(cmd: &str) -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Every distinct executable called `cmd` on `path`, in PATH order. Two PATH
+/// entries that resolve to the same file (a symlinked bin dir, say) count once.
+pub fn which_all_in(cmd: &str, path: &OsStr) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    let mut found = Vec::new();
+    for dir in std::env::split_paths(path) {
+        for name in executable_names(cmd) {
+            let candidate = dir.join(name);
+            if !candidate.is_file() {
+                continue;
+            }
+            let real = std::fs::canonicalize(&candidate).unwrap_or_else(|_| candidate.clone());
+            if seen.insert(real) {
+                found.push(candidate);
+            }
+        }
+    }
+    found
+}
+
+/// Every copy of `cmd` on the augmented PATH.
+pub fn which_all(cmd: &str) -> Vec<PathBuf> {
+    which_all_in(cmd, augmented_path())
+}
+
+/// Whether this executable belongs to Homebrew (after resolving symlinks, so
+/// `/usr/local/bin/x -> ../Cellar/x/…` counts too).
+pub fn is_homebrew_owned(path: &Path) -> bool {
+    let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let s = real.to_string_lossy();
+    s.starts_with("/opt/homebrew/") || s.contains("/Cellar/") || s.starts_with("/usr/local/Homebrew/")
+}
+
+/// The PATH your interactive shell actually uses.
+///
+/// A Finder-launched app gets a minimal PATH, and the augmented one above is
+/// our own guess at an order. Which of two copies of a tool *you* run depends
+/// on your shell config (`~/.zshrc` usually puts `~/.local/bin` first), so ask
+/// the shell. Interactive, because that's where most PATH edits live; bounded
+/// by a timeout; output fenced with a marker because rc files can print.
+pub async fn login_shell_path() -> Option<OsString> {
+    #[cfg(target_os = "windows")]
+    {
+        return None;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|s| s.starts_with('/'))
+            .unwrap_or_else(|| "/bin/zsh".into());
+        let mut c = Command::new(&shell);
+        c.args(["-ilc", "printf '\n__IOINV_PATH__%s__END__' \"$PATH\""]);
+        c.stdin(std::process::Stdio::null());
+        c.kill_on_drop(true);
+        let out = tokio::time::timeout(Duration::from_secs(3), c.output()).await.ok()?.ok()?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let start = text.rfind("__IOINV_PATH__")? + "__IOINV_PATH__".len();
+        let end = start + text[start..].find("__END__")?;
+        let path = text[start..end].trim();
+        (!path.is_empty()).then(|| OsString::from(path))
+    }
 }
 
 pub fn is_available(cmd: &str) -> bool {

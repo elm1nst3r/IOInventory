@@ -64,6 +64,36 @@ const MANAGE: &[ManageSpec] = &[
         install: Some(&["install", "{name}"]),
     },
     ManageSpec {
+        collector: "uv-tool",
+        tool: "uv",
+        update: Some(&["tool", "upgrade", "{name}"]),
+        delete: Some(&["tool", "uninstall", "{name}"]),
+        install: Some(&["tool", "install", "{name}"]),
+    },
+    // `--install-extension <id> --force` is the editor CLI's update: it
+    // reinstalls at the latest version.
+    ManageSpec {
+        collector: "vscode-extension",
+        tool: "code",
+        update: Some(&["--install-extension", "{name}", "--force"]),
+        delete: Some(&["--uninstall-extension", "{name}"]),
+        install: Some(&["--install-extension", "{name}"]),
+    },
+    ManageSpec {
+        collector: "cursor-extension",
+        tool: "cursor",
+        update: Some(&["--install-extension", "{name}", "--force"]),
+        delete: Some(&["--uninstall-extension", "{name}"]),
+        install: Some(&["--install-extension", "{name}"]),
+    },
+    ManageSpec {
+        collector: "windsurf-extension",
+        tool: "windsurf",
+        update: Some(&["--install-extension", "{name}", "--force"]),
+        delete: Some(&["--uninstall-extension", "{name}"]),
+        install: Some(&["--install-extension", "{name}"]),
+    },
+    ManageSpec {
         collector: "gem",
         tool: "gem",
         update: Some(&["update", "{name}"]),

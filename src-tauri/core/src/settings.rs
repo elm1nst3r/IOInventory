@@ -39,8 +39,8 @@ pub const SOURCES: &[ScanSource] = &[
     },
     ScanSource {
         id: "pip",
-        label: "pip & pipx",
-        description: "Python packages installed for the user, and pipx apps.",
+        label: "pip, pipx & uv",
+        description: "Python packages installed for the user, pipx apps and uv tools.",
         domain: Domain::PackageManager,
     },
     ScanSource {
@@ -102,6 +102,18 @@ pub const SOURCES: &[ScanSource] = &[
         label: "Hugging Face cache",
         description: "Models and datasets cached by the Hugging Face libraries.",
         domain: Domain::AiAgent,
+    },
+    ScanSource {
+        id: "editor_extensions",
+        label: "Editor extensions",
+        description: "Extensions installed in VS Code, Cursor and Windsurf.",
+        domain: Domain::PackageManager,
+    },
+    ScanSource {
+        id: "go",
+        label: "Go binaries",
+        description: "Tools installed with `go install` (in GOBIN or ~/go/bin).",
+        domain: Domain::PackageManager,
     },
     ScanSource {
         id: "applications",
@@ -221,8 +233,9 @@ mod tests {
         assert_eq!(ids.len(), count, "duplicate source id in SOURCES");
         // Mirrors the collectors joined in scan::run_all.
         let expected = [
-            "ai_libs", "ai_tools", "applications", "cargo", "claude", "docker", "gem", "hf_cache",
-            "homebrew", "npm", "ollama", "pip", "repos", "runtimes",
+            "ai_libs", "ai_tools", "applications", "cargo", "claude", "docker",
+            "editor_extensions", "gem", "go", "hf_cache", "homebrew", "npm", "ollama", "pip",
+            "repos", "runtimes",
         ];
         assert_eq!(ids, expected, "SOURCES has drifted from scan::run_all");
     }

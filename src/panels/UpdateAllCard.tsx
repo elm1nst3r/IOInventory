@@ -22,6 +22,16 @@ const SHORT: Record<string, string> = {
   "pipx-upgrade": "pipx",
   "cargo-update": "cargo",
   "gh-upgrade": "gh extensions",
+  "pnpm-upgrade": "pnpm",
+  "uv-self": "uv",
+  "uv-tools": "uv tools",
+  "gem-update": "gems",
+  "deno-upgrade": "Deno",
+  "bun-upgrade": "Bun",
+  "claude-update": "Claude Code",
+  "codex-update": "Codex",
+  "vscode-extensions": "VS Code extensions",
+  "ollama-models": "Ollama models",
 };
 
 function ago(at: number): string {

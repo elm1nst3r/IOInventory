@@ -1109,7 +1109,12 @@ fn list_cleanups() -> String {
             c.category,
             c.title,
             c.command,
-            if c.available { "" } else { "  (tool NOT installed here)" },
+            match (&c.available, &c.note, c.runnable) {
+                (_, _, false) => "  (check only — preview it; it never runs)".to_string(),
+                (true, _, _) => String::new(),
+                (false, Some(why), _) => format!("  (unavailable: {why})"),
+                (false, None, _) => "  (tool NOT installed here)".to_string(),
+            },
             c.description
         ));
     }

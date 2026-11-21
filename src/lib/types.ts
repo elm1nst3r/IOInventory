@@ -69,6 +69,10 @@ export interface CleanupAction {
   category: string;
   command: string;
   available: boolean;
+  /** Why it can't run here, when that isn't simply "not installed". */
+  note?: string | null;
+  /** False for check-only actions (System updates). */
+  runnable: boolean;
 }
 
 export interface CleanupPreview {

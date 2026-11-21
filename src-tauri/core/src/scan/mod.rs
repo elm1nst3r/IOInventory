@@ -6,7 +6,9 @@ pub mod cargo;
 pub mod claude;
 pub mod docker;
 pub mod enrich;
+pub mod extensions;
 pub mod gem;
+pub mod gobin;
 pub mod hf_cache;
 pub mod homebrew;
 pub mod npm;
@@ -15,6 +17,7 @@ pub mod outdated;
 pub mod pip;
 pub mod repos;
 pub mod runtimes;
+pub mod shadow;
 pub mod util;
 
 use crate::model::Item;
@@ -79,7 +82,19 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
     let on = |id: &str| settings.is_enabled(id);
     let warnings = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
-    let (brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_, apps_) = tokio::join!(
+    // Duplicate-install detection needs the user's shell PATH. Spawning a shell
+    // costs a few hundred ms, so it runs alongside the collectors rather than
+    // after them — and only when a source that it annotates is on.
+    let check_path = on("runtimes") || on("ai_tools");
+    let shell_path = async {
+        if check_path {
+            util::login_shell_path().await
+        } else {
+            None
+        }
+    };
+
+    let ((brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_, apps_, ext_, go_), shell_path) = tokio::join!(async { tokio::join!(
         when("homebrew", on("homebrew"), warnings.clone(), homebrew::collect()),
         when("npm", on("npm"), warnings.clone(), npm::collect()),
         when("pip", on("pip"), warnings.clone(), pip::collect()),
@@ -94,11 +109,14 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
         when("ai_tools", on("ai_tools"), warnings.clone(), ai_tools::collect()),
         when("repos", on("repos"), warnings.clone(), repos::collect(&roots)),
         when("applications", on("applications"), warnings.clone(), applications::collect()),
-    );
+        when("editor_extensions", on("editor_extensions"), warnings.clone(), extensions::collect()),
+        when("go", on("go"), warnings.clone(), gobin::collect()),
+    ) }, shell_path);
 
     let mut items = Vec::new();
     for group in [
         brew, npm_, pip_, cargo_, gem_, runtimes_, docker_, claude_, ollama_, hf, ai, tools_, repos_, apps_,
+        ext_, go_,
     ] {
         items.extend(group);
     }
@@ -107,6 +125,11 @@ pub async fn run_all(roots: Vec<PathBuf>, settings: &Settings) -> ScanOutcome {
     // give every AI capability the `agents` list the AI view reads. Cheap and
     // purely in-memory, so it runs before the network-bound version checks.
     agents::link(&mut items);
+
+    // The same tool installed more than once, where only the first on PATH runs.
+    if check_path {
+        shadow::mark(&mut items, shell_path).await;
+    }
 
     // Annotate items that have newer versions available (bulk brew/npm checks).
     // Both queries are slow, so skip them when nothing they'd annotate is here.

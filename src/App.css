@@ -2812,3 +2812,104 @@ body,
 .ua-step-time .running-dots {
   display: none;
 }
+
+/* ---- Availability notes, PATH conflicts, duplicate copies ---- */
+.cc-note {
+  font-size: 12px !important;
+  color: var(--text-faint) !important;
+  margin: -4px 0 10px !important;
+}
+.pc-ico {
+  color: #f0a020;
+  vertical-align: -2px;
+}
+.pc-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-1);
+}
+.pc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.pc-row + .pc-row {
+  border-top: 1px solid var(--line);
+}
+.pc-row:hover {
+  background: var(--bg-2);
+}
+.pc-name {
+  flex: none;
+  min-width: 64px;
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.pc-desc {
+  line-height: 1.45;
+}
+.copies-box {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #f0a020 45%, var(--line));
+  background: color-mix(in srgb, #f0a020 8%, var(--bg-1));
+  font-size: 12.5px;
+}
+.copies-head {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.copies-box ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.copies-box li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  color: var(--text-faint);
+}
+.copies-box li.active {
+  color: var(--text);
+}
+.copies-box li code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.copies-tag,
+.copies-state {
+  flex: none;
+  font-size: 10.5px;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  padding: 0 5px;
+}
+.copies-box li.active .copies-state {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 50%, var(--line));
+}
+.copies-box p {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+}

@@ -215,12 +215,17 @@ pub struct CleanupAction {
     pub id: String,
     pub title: String,
     pub description: String,
-    /// "update" or "cleanup" — groups the action in the Utilities view.
+    /// "update", "cleanup" or "system" — groups the action in the Utilities view.
     pub category: String,
     /// Human-readable command that will run.
     pub command: String,
     /// Whether this collector/tool is available on this machine.
     pub available: bool,
+    /// Why it isn't available, when "not installed" isn't the reason (macOS's
+    /// built-in Ruby, a tool Homebrew already updates…).
+    pub note: Option<String>,
+    /// False for check-only actions, which never run anything from here.
+    pub runnable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

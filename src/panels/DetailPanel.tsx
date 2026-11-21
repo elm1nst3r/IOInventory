@@ -304,6 +304,30 @@ function ItemDetail({
         </div>
       )}
 
+      {Array.isArray(item.metadata?.copies) && item.metadata.copies.length > 1 && (
+        <div className="copies-box">
+          <div className="copies-head">
+            Installed {item.metadata.copies.length} times — only the first one runs
+          </div>
+          <ul>
+            {(item.metadata.copies as { path: string; version?: string | null; active: boolean; homebrew: boolean }[]).map(
+              (c) => (
+                <li key={c.path} className={c.active ? "active" : ""}>
+                  <code>{c.path}</code>
+                  {c.version && <span className="chip-ver">{c.version}</span>}
+                  {c.homebrew && <span className="copies-tag">Homebrew</span>}
+                  <span className="copies-state">{c.active ? "runs" : "hidden"}</span>
+                </li>
+              ),
+            )}
+          </ul>
+          <p>
+            Remove the copy you don't want, or reorder PATH in your shell config so the right one
+            comes first.
+          </p>
+        </div>
+      )}
+
       {canShowUpToDate && (
         <div className={`status-pill ${outdated ? "warn" : "ok"}`}>
           {outdated
