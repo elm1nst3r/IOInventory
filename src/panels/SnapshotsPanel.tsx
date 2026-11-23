@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useStore } from "../store";
 import RunningLabel from "./RunningLabel";
+import HistoryChart from "./HistoryChart";
 import { api } from "../lib/api";
 import { collectorLabel } from "../lib/labels";
 import type { Diff, DiffItem, SnapshotMeta } from "../lib/types";
@@ -288,6 +289,8 @@ export default function SnapshotsPanel() {
         />
         {msg && <span className="snap-msg">{msg}</span>}
       </div>
+
+      <HistoryChart />
 
       <div className="snap-grid">
         <div className="snap-list">

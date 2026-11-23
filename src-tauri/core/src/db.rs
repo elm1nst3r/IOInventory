@@ -407,6 +407,43 @@ impl Db {
         }
     }
 
+    /// Per-domain item counts for every snapshot, oldest first. SQLite counts
+    /// inside the blobs, so this doesn't deserialize whole inventories. A
+    /// corrupt blob is left out rather than failing the whole chart.
+    pub fn snapshot_stats(&self) -> Result<Vec<crate::model::SnapshotStats>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.id, s.name, s.created_at, s.host, s.source,
+                    json_extract(j.value, '$.domain'), COUNT(*)
+             FROM snapshots s
+             JOIN json_each(CASE WHEN json_valid(s.data_json) THEN s.data_json ELSE '[]' END) j
+             GROUP BY s.id, 6
+             ORDER BY s.created_at, s.id",
+        )?;
+        let mut rows = stmt.query([])?;
+        let mut out: Vec<crate::model::SnapshotStats> = Vec::new();
+        while let Some(r) = rows.next()? {
+            let id: i64 = r.get(0)?;
+            if out.last().map(|s| s.id) != Some(id) {
+                out.push(crate::model::SnapshotStats {
+                    id,
+                    name: r.get(1)?,
+                    created_at: r.get(2)?,
+                    host: r.get(3)?,
+                    source: r.get(4)?,
+                    total: 0,
+                    domains: Default::default(),
+                });
+            }
+            let domain: Option<String> = r.get(5)?;
+            let count: i64 = r.get(6)?;
+            if let (Some(stat), Some(domain)) = (out.last_mut(), domain) {
+                stat.total += count;
+                stat.domains.insert(domain, count);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn delete_snapshot(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM snapshots WHERE id = ?1", params![id])?;
@@ -523,6 +560,32 @@ mod tests {
 
     /// Notes and tags written against a pre-0.21 Codex/Gemini MCP key follow
     /// the server to its new key; ones already on the new key are kept.
+    #[test]
+    fn snapshot_stats_count_by_domain() {
+        let path = std::env::temp_dir().join(format!("ioinv-stats-{}.sqlite", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = Db::open(&path).unwrap();
+        let items = vec![
+            Item::new(Domain::Application, "app", "A"),
+            Item::new(Domain::Application, "app", "B"),
+            Item::new(Domain::Runtime, "runtime", "node"),
+        ];
+        // Saved out of order: the chart wants oldest first.
+        db.save_snapshot("new", "2026-02-01T00:00:00+00:00", "h", "macos", "scan", &items[..1]).unwrap();
+        db.save_snapshot("old", "2026-01-01T00:00:00+00:00", "h", "macos", "scan", &items).unwrap();
+        let bad = db.save_snapshot("bad", "2026-03-01T00:00:00+00:00", "h", "macos", "scan", &items).unwrap();
+        db.conn.execute("UPDATE snapshots SET data_json = 'nope' WHERE id = ?1", params![bad.id]).unwrap();
+
+        let stats = db.snapshot_stats().unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(stats.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["old", "new"]);
+        assert_eq!(stats[0].total, 3);
+        assert_eq!(stats[0].domains["application"], 2);
+        assert_eq!(stats[0].domains["runtime"], 1);
+        assert_eq!(stats[1].total, 1);
+        println!("snapshot_stats_count_by_domain OK");
+    }
+
     #[test]
     fn legacy_mcp_keys_are_migrated() {
         let path = std::env::temp_dir().join(format!("io-inv-mig-{}.sqlite", std::process::id()));

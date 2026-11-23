@@ -113,6 +113,16 @@ export interface SnapshotMeta {
   source: string; // "scan" | "import"
 }
 
+export interface SnapshotStats {
+  id: number;
+  name: string;
+  created_at: string;
+  host: string;
+  source: string;
+  total: number;
+  domains: Partial<Record<Domain, number>>;
+}
+
 export interface DiffItem {
   name: string;
   collector: string;

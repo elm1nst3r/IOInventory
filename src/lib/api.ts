@@ -14,6 +14,7 @@ import type {
   ScanSource,
   Settings,
   SnapshotMeta,
+  SnapshotStats,
 } from "./types";
 
 /** The least an item must carry for the backend to work out its actions. */
@@ -69,6 +70,7 @@ export const api = {
   // Snapshots
   saveSnapshot: (name: string) => invoke<SnapshotMeta>("save_snapshot", { name }),
   listSnapshots: () => invoke<SnapshotMeta[]>("list_snapshots"),
+  snapshotStats: () => invoke<SnapshotStats[]>("snapshot_stats"),
   getSnapshotInventory: (id: number) => invoke<Inventory>("get_snapshot_inventory", { id }),
   getSnapshotGraph: (id: number) => invoke<Graph>("get_snapshot_graph", { id }),
   deleteSnapshot: (id: number) => invoke<void>("delete_snapshot", { id }),

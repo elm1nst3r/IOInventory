@@ -239,6 +239,15 @@ pub async fn list_snapshots(state: State<'_, AppState>) -> Result<Vec<SnapshotMe
     db.list_snapshots().map_err(|e| e.to_string())
 }
 
+/// Per-category item counts across all snapshots, for the History chart.
+#[tauri::command]
+pub async fn snapshot_stats(
+    state: State<'_, AppState>,
+) -> Result<Vec<agent_ledger_core::model::SnapshotStats>, String> {
+    let db = state.db.lock().unwrap();
+    db.snapshot_stats().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn get_snapshot_inventory(
     state: State<'_, AppState>,

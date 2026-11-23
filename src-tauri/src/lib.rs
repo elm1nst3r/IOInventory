@@ -57,6 +57,7 @@ pub fn run() {
             commands::export_agent_map,
             commands::save_snapshot,
             commands::list_snapshots,
+            commands::snapshot_stats,
             commands::get_snapshot_inventory,
             commands::get_snapshot_graph,
             commands::delete_snapshot,

@@ -180,6 +180,19 @@ pub struct SnapshotMeta {
     pub source: String,
 }
 
+/// Item counts for one snapshot, for the History trend chart.
+#[derive(Debug, Clone, Serialize)]
+pub struct SnapshotStats {
+    pub id: i64,
+    pub name: String,
+    pub created_at: String,
+    pub host: String,
+    pub source: String,
+    pub total: i64,
+    /// Domain id ("package_manager", ...) to item count.
+    pub domains: std::collections::BTreeMap<String, i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffItem {
     pub name: String,
